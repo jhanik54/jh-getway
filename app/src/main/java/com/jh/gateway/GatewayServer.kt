@@ -38,23 +38,26 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
                 if (!call.authorized()) return@post
                 val body = call.receiveText()
                 if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
-                    call.respondOutputStream(ContentType.Text.EventStream) { router.stream(body, this) }
+                    call.respondOutputStream(ContentType.Text.EventStream) { router.stream(body, this, ClientProtocol.OPENAI) }
                 } else {
                     val started = System.currentTimeMillis()
                     val result = router.forward(body)
+                    stats.recordUsage(result.body)
                     stats.record("/v1/chat/completions", result.status, result.provider, System.currentTimeMillis() - started)
                     call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
                 }
             }
             post("/v1/messages") {
                 if (!call.authorized()) return@post
-                val result = router.forward(ProtocolAdapter.toOpenAi(call.receiveText(), ClientProtocol.ANTHROPIC))
-                call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.ANTHROPIC), ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
+                val body = call.receiveText()
+                if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) call.respondOutputStream(ContentType.Text.EventStream) { router.stream(ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC), this, ClientProtocol.ANTHROPIC) }
+                else { val result = router.forward(ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC)); stats.recordUsage(result.body); call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.ANTHROPIC), ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
             }
             post("/v1/responses") {
                 if (!call.authorized()) return@post
-                val result = router.forward(ProtocolAdapter.toOpenAi(call.receiveText(), ClientProtocol.RESPONSES))
-                call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.RESPONSES), ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
+                val body = call.receiveText()
+                if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) call.respondOutputStream(ContentType.Text.EventStream) { router.stream(ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES), this, ClientProtocol.RESPONSES) }
+                else { val result = router.forward(ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES)); stats.recordUsage(result.body); call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.RESPONSES), ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
             }
         }
     }

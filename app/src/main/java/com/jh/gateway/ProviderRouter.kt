@@ -4,20 +4,27 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.io.OutputStream
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 data class ForwardResult(val status: Int, val body: String, val provider: String? = null)
 
 class ProviderRouter(private val store: ProviderStore, private val chainStore: ChainStore) {
+    private val roundRobin = ConcurrentHashMap<String, AtomicInteger>()
+    private val sticky = ConcurrentHashMap<String, String>()
     fun forward(body: String): ForwardResult {
         val requestedModel = runCatching { JSONObject(body).optString("model", "auto") }.getOrDefault("auto")
-        val candidates = eligible(requestedModel)
+        val candidates = eligible(requestedModel, body)
         if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are disabled or cooling down\",\"type\":\"gateway_unavailable\"}}")
         var last = ForwardResult(502, "{\"error\":{\"message\":\"No provider response\",\"type\":\"provider_error\"}}")
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
             last = runCatching { request(provider, key, body) }.getOrElse { ForwardResult(502, "{\"error\":{\"message\":\"${escape(it.message ?: "Network error")}\",\"type\":\"network_error\"}}", provider.name) }
             when {
-                last.status in 200..299 -> return last.copy(provider = provider.name)
+                last.status in 200..299 -> {
+                    sessionKey(body)?.let { sticky[it] = provider.id }
+                    return last.copy(provider = provider.name)
+                }
                 last.status == 401 || last.status == 403 -> store.disable(provider)
                 last.status == 429 -> store.markCooldown(provider, 60_000)
                 last.status >= 500 -> store.markCooldown(provider, 30_000)
@@ -27,9 +34,9 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
     }
 
     /** Transparent SSE pass-through. Fallback is still possible until the first upstream byte. */
-    fun stream(body: String, output: OutputStream): ForwardResult {
+    fun stream(body: String, output: OutputStream, clientProtocol: ClientProtocol = ClientProtocol.OPENAI): ForwardResult {
         val requestedModel = runCatching { JSONObject(body).optString("model", "auto") }.getOrDefault("auto")
-        val candidates = eligible(requestedModel)
+        val candidates = eligible(requestedModel, body)
         if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are unavailable\",\"type\":\"gateway_unavailable\"}}")
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
@@ -38,9 +45,16 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             val connection = connectionResult.getOrThrow()
             val status = connection.responseCode
             if (status in 200..299) {
-                connection.inputStream.use { it.copyTo(output) }
-                output.flush()
+                val event = StringBuilder()
+                connection.inputStream.bufferedReader().useLines { lines -> lines.forEach { line ->
+                    if (line.startsWith("event:")) event.setLength(0).also { event.append(line.substringAfter(':').trim()) }
+                    else if (line.startsWith("data:")) {
+                        val translated = ProtocolAdapter.translateStreamData(line.substringAfter(':').trim(), event.toString().ifBlank { null }, clientProtocol, provider.protocol)
+                        if (translated != null) { output.write(translated.toByteArray()); output.flush() }
+                    }
+                } }
                 connection.disconnect()
+                sessionKey(body)?.let { sticky[it] = provider.id }
                 return ForwardResult(status, "", provider.name)
             }
             if (status == 401 || status == 403) store.disable(provider)
@@ -51,13 +65,27 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         return ForwardResult(502, "{\"error\":{\"message\":\"All providers failed before streaming\",\"type\":\"provider_error\"}}")
     }
 
-    private fun eligible(requestedModel: String): List<StoredProvider> {
+    private fun eligible(requestedModel: String, body: String): List<StoredProvider> {
         val providers = store.list().filter { provider ->
         provider.enabled && !provider.isCoolingDown && (requestedModel.isBlank() || requestedModel == "auto" || provider.model == "auto" || provider.model == requestedModel)
         }
         val chain = chainStore.load(store.list()).withIndex().associate { it.value.id to (it.index to it.value.tier.ordinal) }
-        return providers.sortedWith(compareBy({ chain[it.id]?.second ?: 0 }, { chain[it.id]?.first ?: Int.MAX_VALUE }, { it.priority }))
+        val sorted = providers.sortedWith(compareBy({ chain[it.id]?.second ?: 0 }, { chain[it.id]?.first ?: Int.MAX_VALUE }, { it.priority }))
+        sessionKey(body)?.let { key -> sticky[key]?.let { id -> sorted.firstOrNull { it.id == id }?.let { selected -> return listOf(selected) + sorted.filterNot { it.id == selected.id } } } }
+        if (sorted.size < 2) return sorted
+        val bestTier = chain[sorted.first().id]?.second ?: 0
+        val sameTier = sorted.filter { (chain[it.id]?.second ?: 0) == bestTier }
+        if (sameTier.size < 2) return sorted
+        val offset = (roundRobin.getOrPut(requestedModel.ifBlank { "auto" }) { AtomicInteger(0) }.getAndIncrement() and Int.MAX_VALUE) % sameTier.size
+        val rotated = sameTier.drop(offset) + sameTier.take(offset)
+        return rotated + sorted.filterNot { it.id in sameTier.map { entry -> entry.id }.toSet() }
     }
+
+    private fun sessionKey(body: String): String? = runCatching {
+        val input = JSONObject(body)
+        input.optString("user").takeIf { it.isNotBlank() }
+            ?: input.optJSONObject("metadata")?.optString("conversation_id")?.takeIf { it.isNotBlank() }
+    }.getOrNull()
 
     private fun request(provider: StoredProvider, key: String, body: String): ForwardResult {
         val connection = open(provider, key, ProtocolAdapter.toProvider(body, provider))

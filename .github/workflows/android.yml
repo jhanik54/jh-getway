@@ -74,3 +74,4 @@ jobs:
             - Persistent pending-update queue with retry after closing the app
             - Persistent Light, Dark, and System appearance modes
             - Updater retry state and provider cooldown on transient server failures
+            - Anthropic/Responses streaming bridges, tool-call translation, sticky routing, round-robin, and token usage

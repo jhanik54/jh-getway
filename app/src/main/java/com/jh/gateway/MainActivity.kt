@@ -556,6 +556,7 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
                     MetricCard("Successful", success.toString(), Icons.Default.CheckCircle, Modifier.fillMaxWidth())
                     MetricCard("Errors", (total - success).coerceAtLeast(0).toString(), Icons.Default.Warning, Modifier.fillMaxWidth())
                     Text("Average latency: ${average}ms", color = Muted)
+                    Text("Tokens: ${stats.promptTokens()} input · ${stats.completionTokens()} output", color = Muted)
                 }
             }
         },

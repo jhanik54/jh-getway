@@ -29,7 +29,20 @@ class GatewayStats(context: Context) {
     fun requestCount(): Int = prefs.getInt(REQUESTS, 0)
 
     @Synchronized
-    fun clear() { prefs.edit().remove(LOGS).remove(REQUESTS).apply() }
+    fun recordUsage(body: String) {
+        runCatching {
+            val usage = JSONObject(body).optJSONObject("usage") ?: return
+            val prompt = usage.optInt("prompt_tokens", usage.optInt("input_tokens", 0))
+            val completion = usage.optInt("completion_tokens", usage.optInt("output_tokens", 0))
+            prefs.edit().putInt(PROMPT_TOKENS, prefs.getInt(PROMPT_TOKENS, 0) + prompt).putInt(COMPLETION_TOKENS, prefs.getInt(COMPLETION_TOKENS, 0) + completion).apply()
+        }
+    }
 
-    companion object { private const val LOGS = "logs"; private const val REQUESTS = "requests" }
+    fun promptTokens(): Int = prefs.getInt(PROMPT_TOKENS, 0)
+    fun completionTokens(): Int = prefs.getInt(COMPLETION_TOKENS, 0)
+
+    @Synchronized
+    fun clear() { prefs.edit().remove(LOGS).remove(REQUESTS).remove(PROMPT_TOKENS).remove(COMPLETION_TOKENS).apply() }
+
+    companion object { private const val LOGS = "logs"; private const val REQUESTS = "requests"; private const val PROMPT_TOKENS = "prompt_tokens"; private const val COMPLETION_TOKENS = "completion_tokens" }
 }
