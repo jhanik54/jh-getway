@@ -16,6 +16,7 @@ class GatewayService : Service() {
     private lateinit var providerStore: ProviderStore
     private lateinit var gatewaySecurity: GatewaySecurity
     private lateinit var gatewayStats: GatewayStats
+    private lateinit var gatewaySettings: GatewaySettings
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
@@ -24,6 +25,7 @@ class GatewayService : Service() {
         providerStore = ProviderStore(this)
         gatewaySecurity = GatewaySecurity(this)
         gatewayStats = GatewayStats(this)
+        gatewaySettings = GatewaySettings(this)
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Gateway", NotificationManager.IMPORTANCE_LOW)
@@ -41,7 +43,7 @@ class GatewayService : Service() {
         }
         startForeground(NOTIFICATION_ID, notification())
         acquireLocks()
-        if (gatewayServer == null) gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats).also { it.start() }
+        if (gatewayServer == null) gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats, gatewaySettings).also { it.start() }
         return START_STICKY
     }
 

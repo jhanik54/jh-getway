@@ -14,9 +14,9 @@ import io.ktor.server.routing.routing
 import io.ktor.http.HttpStatusCode
 
 /** Local-only HTTP surface. Provider forwarding is the next milestone. */
-class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val stats: GatewayStats, private val port: Int = 8787) {
+class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val stats: GatewayStats, settings: GatewaySettings) {
     private val router = ProviderRouter(store)
-    private val server = embeddedServer(CIO, host = "127.0.0.1", port = port) {
+    private val server = embeddedServer(CIO, host = if (settings.wifiMode) "0.0.0.0" else "127.0.0.1", port = settings.port) {
         routing {
             get("/health") {
                 call.respondText(
@@ -46,8 +46,16 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
                     call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
                 }
             }
-            post("/v1/messages") { if (!call.authorized()) return@post; val result = router.forward(call.receiveText()); call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
-            post("/v1/responses") { if (!call.authorized()) return@post; val result = router.forward(call.receiveText()); call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
+            post("/v1/messages") {
+                if (!call.authorized()) return@post
+                val result = router.forward(ProtocolAdapter.toOpenAi(call.receiveText(), ClientProtocol.ANTHROPIC))
+                call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.ANTHROPIC), ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
+            }
+            post("/v1/responses") {
+                if (!call.authorized()) return@post
+                val result = router.forward(ProtocolAdapter.toOpenAi(call.receiveText(), ClientProtocol.RESPONSES))
+                call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.RESPONSES), ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
+            }
         }
     }
 
