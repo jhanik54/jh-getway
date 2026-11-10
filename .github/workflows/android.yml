@@ -46,3 +46,4 @@ jobs:
             - Android Download Manager download with notification
             - Release notes and GitHub release fallback
             - Install update action with Android permission guidance
+            - Persistent Best/Good/Basic routing chain with reorder controls
