@@ -78,6 +78,20 @@ class ProviderStore(context: Context) {
     fun setEnabled(id: String, enabled: Boolean) { save(list().map { if (it.id == id) it.copy(enabled = enabled) else it }) }
 
     @Synchronized
+    fun update(id: String, name: String, baseUrl: String, model: String, apiKey: String, protocol: ProviderProtocol) {
+        require(name.trim().isNotBlank()) { "Provider name is required" }
+        val normalizedUrl = baseUrl.trim().trimEnd('/')
+        val parsedUrl = runCatching { URI(normalizedUrl) }.getOrNull()
+        require(parsedUrl != null && parsedUrl.scheme in setOf("http", "https") && !parsedUrl.host.isNullOrBlank()) { "Base URL must be a valid http(s) URL" }
+        val normalizedKey = apiKey.trim()
+        require(normalizedKey.isNotBlank()) { "API key is required" }
+        require(list().filterNot { it.id == id }.none { apiKey(it) == normalizedKey }) { "This API key is already configured" }
+        val current = list().firstOrNull { it.id == id } ?: error("Provider not found")
+        save(list().map { if (it.id == id) current.copy(name = name.trim(), baseUrl = normalizedUrl, model = model.trim().ifBlank { "auto" }, protocol = protocol) else it })
+        prefs.edit().putString(keyName(id), encrypt(normalizedKey)).apply()
+    }
+
+    @Synchronized
     fun remove(id: String) {
         save(list().filterNot { it.id == id })
         prefs.edit().remove(keyName(id)).apply()

@@ -172,6 +172,8 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var showMonitoringDialog by remember { mutableStateOf(false) }
     var showBackupDialog by remember { mutableStateOf(false) }
     var showHelpDialog by remember { mutableStateOf(false) }
+    var editingProvider by remember { mutableStateOf<StoredProvider?>(null) }
+    var providerMessage by remember { mutableStateOf("") }
     val gatewaySettings = remember { GatewaySettings(context) }
     val gatewayState = remember { GatewayStateStore(context) }
     LaunchedEffect(Unit) { running = gatewayState.state == GatewayRunState.RUNNING }
@@ -219,7 +221,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     }
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 })
-                1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true }, onToggle = { key, enabled -> providerStore.setEnabled(key.id, enabled); keys = providerStore.list().map { it.toProviderKey(providerStore) } }, onDelete = { key -> providerStore.remove(key.id); keys = providerStore.list().map { it.toProviderKey(providerStore) } })
+                1 -> ProvidersScreen(Modifier.padding(padding), keys, providerMessage, onAdd = { showAddDialog = true }, onToggle = { key, enabled -> providerStore.setEnabled(key.id, enabled); keys = providerStore.list().map { it.toProviderKey(providerStore) } }, onEdit = { key -> editingProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onDelete = { key -> providerStore.remove(key.id); keys = providerStore.list().map { it.toProviderKey(providerStore) } }, onTest = { key -> val provider = providerStore.list().firstOrNull { it.id == key.id }; val secret = provider?.let { providerStore.apiKey(it) }; if (provider == null || secret == null) providerMessage = "Credential unavailable" else { providerMessage = "Testing ${key.name}…"; ProviderModelFetcher.fetch(provider.baseUrl, secret, provider.protocol) { result -> (context as? ComponentActivity)?.runOnUiThread { providerMessage = result.fold({ "${key.name}: connection OK (${it.size} models)" }, { "${key.name}: ${it.message ?: "test failed"}" }) } } } })
                 else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onChain = { showChainDialog = true }, onMonitoring = { showMonitoringDialog = true }, onBackup = { showBackupDialog = true }, onHelp = { showHelpDialog = true }, onUpdate = { showUpdateDialog = true })
             }
         }
@@ -227,11 +229,14 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
             AddProviderDialog(
                 onDismiss = { showAddDialog = false },
                 onSave = { name, url, model, key, protocol ->
-                    providerStore.add(name, url, model, key, protocol)
-                    keys = providerStore.list().map { it.toProviderKey(providerStore) }
-                    showAddDialog = false
+                    runCatching { providerStore.add(name, url, model, key, protocol) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore) }; showAddDialog = false }.onFailure { providerMessage = it.message ?: "Could not add provider" }
                 }
             )
+        }
+        editingProvider?.let { provider ->
+            AddProviderDialog(initial = provider, initialKey = providerStore.apiKey(provider).orEmpty(), onDismiss = { editingProvider = null }, onSave = { name, url, model, key, protocol ->
+                runCatching { providerStore.update(provider.id, name, url, model, key, protocol) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore) }; editingProvider = null; providerMessage = "Provider updated" }.onFailure { providerMessage = it.message ?: "Update failed" }
+            })
         }
         if (showSettings) SettingsDialog(gatewaySettings, onSecurityChanged = { (context as? MainActivity)?.applySecurityFromUi() }, onAppearanceChanged = { theme = gatewaySettings.theme }, onDismiss = { showSettings = false })
         if (showUpdateDialog) UpdateDialog(onDismiss = { showUpdateDialog = false })
@@ -254,12 +259,12 @@ private fun StoredProvider.toProviderKey(store: ProviderStore) = ProviderKey(
 )
 
 @Composable
-private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, String, String, ProviderProtocol) -> Unit) {
+private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: String = "", onDismiss: () -> Unit, onSave: (String, String, String, String, ProviderProtocol) -> Unit) {
     val context = LocalContext.current
-    var name by remember { mutableStateOf("") }
-    var url by remember { mutableStateOf("https://api.openai.com") }
-    var model by remember { mutableStateOf("auto") }
-    var key by remember { mutableStateOf("") }
+    var name by remember(initial?.id) { mutableStateOf(initial?.name ?: "") }
+    var url by remember(initial?.id) { mutableStateOf(initial?.baseUrl ?: "https://api.openai.com") }
+    var model by remember(initial?.id) { mutableStateOf(initial?.model ?: "auto") }
+    var key by remember(initial?.id) { mutableStateOf(initialKey) }
     var showPresets by remember { mutableStateOf(false) }
     var protocol by remember { mutableStateOf(ProviderProtocol.OPENAI) }
     var models by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -267,7 +272,7 @@ private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, St
     var fetchMessage by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add provider key") },
+        title = { Text(if (initial == null) "Add provider key" else "Edit provider") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Choose a provider preset or enter a custom endpoint", color = Muted, style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = { showPresets = true }, modifier = Modifier.fillMaxWidth()) { Text(if (name.isBlank()) "Choose provider preset" else name) }
@@ -399,22 +404,23 @@ private fun RouteCard() {
 }
 
 @Composable
-private fun ProvidersScreen(modifier: Modifier, keys: List<ProviderKey>, onAdd: () -> Unit, onToggle: (ProviderKey, Boolean) -> Unit, onDelete: (ProviderKey) -> Unit) {
+private fun ProvidersScreen(modifier: Modifier, keys: List<ProviderKey>, message: String, onAdd: () -> Unit, onToggle: (ProviderKey, Boolean) -> Unit, onEdit: (ProviderKey) -> Unit, onDelete: (ProviderKey) -> Unit, onTest: (ProviderKey) -> Unit) {
     Column(modifier.fillMaxSize().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Providers", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text("Manage your AI keys and models", color = Muted) }; Button(onClick = onAdd) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text("Add key") } }
+        if (message.isNotBlank()) Text(message, color = Muted, style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(true, {}, label = { Text("All  3") }); FilterChip(false, {}, label = { Text("Active  2") }); FilterChip(false, {}, label = { Text("Cooldown  1") }) }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(keys) { ProviderCard(it, onToggle, onDelete) } }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(keys) { ProviderCard(it, onToggle, onEdit, onDelete, onTest) } }
     }
 }
 
 @Composable
-private fun ProviderCard(key: ProviderKey, onToggle: (ProviderKey, Boolean) -> Unit, onDelete: (ProviderKey) -> Unit) {
+private fun ProviderCard(key: ProviderKey, onToggle: (ProviderKey, Boolean) -> Unit, onEdit: (ProviderKey) -> Unit, onDelete: (ProviderKey) -> Unit, onTest: (ProviderKey) -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE6EAF0))) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(38.dp), shape = RoundedCornerShape(10.dp), color = Color(0xFFF0F2FF)) { Icon(Icons.Default.Key, null, tint = Blue, modifier = Modifier.padding(9.dp)) }; Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text(key.name, fontWeight = FontWeight.SemiBold, color = Navy); Text(key.provider, color = Muted, style = MaterialTheme.typography.bodySmall) }; StatusPill(key.status) }
             Row(verticalAlignment = Alignment.CenterVertically) { Text(key.model, color = Navy, fontWeight = FontWeight.Medium); Spacer(Modifier.weight(1f)); Text("Priority ${key.priority}", color = Muted, style = MaterialTheme.typography.labelSmall) }
-            Row(verticalAlignment = Alignment.CenterVertically) { Text(key.maskedKey, color = Muted, style = MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Switch(key.status != KeyStatus.DISABLED, { onToggle(key, it) }); IconButton(onClick = { onDelete(key) }) { Icon(Icons.Default.Delete, "Delete", tint = Color(0xFFD64545)) } }
+            Row(verticalAlignment = Alignment.CenterVertically) { Text(key.maskedKey, color = Muted, style = MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); TextButton(onClick = { onTest(key) }) { Text("Test") }; TextButton(onClick = { onEdit(key) }) { Text("Edit") }; Switch(key.status != KeyStatus.DISABLED, { onToggle(key, it) }); IconButton(onClick = { onDelete(key) }) { Icon(Icons.Default.Delete, "Delete", tint = Color(0xFFD64545)) } }
         }
     }
 }
