@@ -1,6 +1,8 @@
 package com.jh.gateway
 
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -98,6 +100,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(false) }
     val providerStore = remember { ProviderStore(context) }
+    val gatewaySecurity = remember { GatewaySecurity(context) }
     var keys by remember { mutableStateOf(providerStore.list().map { it.toProviderKey(providerStore) }) }
     var showAddDialog by remember { mutableStateOf(false) }
     val tabs = listOf("Home", "Providers", "More")
@@ -131,7 +134,10 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
             }
         ) { padding ->
             when (tab) {
-                0 -> HomeScreen(Modifier.padding(padding), running, onToggle = {
+                0 -> HomeScreen(Modifier.padding(padding), running, gatewaySecurity.maskedKey(), onCopyKey = {
+                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                    clipboard.setPrimaryClip(ClipData.newPlainText("JH GetWay key", gatewaySecurity.gatewayKey()))
+                }, onToggle = {
                     running = !running
                     onRequestNotifications()
                     val intent = Intent(context, GatewayService::class.java).apply {
@@ -184,7 +190,7 @@ private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, St
 }
 
 @Composable
-private fun HomeScreen(modifier: Modifier, running: Boolean, onToggle: () -> Unit) {
+private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String, onCopyKey: () -> Unit, onToggle: () -> Unit) {
     LazyColumn(modifier.fillMaxSize().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Spacer(Modifier.height(8.dp))
@@ -193,12 +199,25 @@ private fun HomeScreen(modifier: Modifier, running: Boolean, onToggle: () -> Uni
             Spacer(Modifier.height(4.dp))
         }
         item { StatusCard(running, onToggle) }
+        item { GatewayKeyCard(gatewayKey, onCopyKey) }
         item { MetricRow() }
         item { SectionTitle("Active route", "View chain") }
         item { RouteCard() }
         item { SectionTitle("Recent activity", "View logs") }
         items(demoLogs.take(2)) { LogRow(it) }
         item { Spacer(Modifier.height(10.dp)) }
+    }
+}
+
+@Composable
+private fun GatewayKeyCard(key: String, onCopy: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F7FF)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE5E2FF))) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(Modifier.size(38.dp), shape = RoundedCornerShape(11.dp), color = Color(0xFFE9EDFF)) { Icon(Icons.Default.Security, null, tint = Blue, modifier = Modifier.padding(9.dp)) }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) { Text("Gateway key", fontWeight = FontWeight.SemiBold, color = Navy); Text(key, color = Muted, style = MaterialTheme.typography.bodySmall); Text("Required by OpenCode and other tools", color = Muted, style = MaterialTheme.typography.labelSmall) }
+            IconButton(onClick = onCopy) { Icon(Icons.Default.ContentCopy, "Copy gateway key", tint = Blue) }
+        }
     }
 }
 
