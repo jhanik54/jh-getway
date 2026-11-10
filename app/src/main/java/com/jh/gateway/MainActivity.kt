@@ -74,6 +74,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(
@@ -124,6 +127,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var showSettings by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var showChainDialog by remember { mutableStateOf(false) }
+    var showMonitoringDialog by remember { mutableStateOf(false) }
     val gatewaySettings = remember { GatewaySettings(context) }
     val tabs = listOf("Home", "Providers", "More")
 
@@ -168,7 +172,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true })
-                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onChain = { showChainDialog = true }, onUpdate = { showUpdateDialog = true })
+                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onChain = { showChainDialog = true }, onMonitoring = { showMonitoringDialog = true }, onUpdate = { showUpdateDialog = true })
             }
         }
         if (showAddDialog) {
@@ -184,6 +188,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         if (showSettings) SettingsDialog(gatewaySettings, onDismiss = { showSettings = false })
         if (showUpdateDialog) UpdateDialog(onDismiss = { showUpdateDialog = false })
         if (showChainDialog) ChainDialog(providerStore, onDismiss = { showChainDialog = false })
+        if (showMonitoringDialog) MonitoringDialog(GatewayStats(context), onDismiss = { showMonitoringDialog = false })
     }
 }
 
@@ -367,16 +372,48 @@ private fun StatusPill(status: KeyStatus) {
 }
 
 @Composable
-private fun MoreScreen(modifier: Modifier, updateMessage: String, onSettings: () -> Unit, onChain: () -> Unit, onUpdate: () -> Unit) {
+private fun MoreScreen(modifier: Modifier, updateMessage: String, onSettings: () -> Unit, onChain: () -> Unit, onMonitoring: () -> Unit, onUpdate: () -> Unit) {
     Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.height(8.dp)); Text("More", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text("Control how JH GetWay works", color = Muted)
         MoreItem(Icons.Default.Storage, "Routing chain", "Set priority and fallback order", onChain)
-        MoreItem(Icons.Default.Refresh, "Request logs", "Review provider switches and errors")
+        MoreItem(Icons.Default.Refresh, "Request logs", "Review provider switches and errors", onMonitoring)
+        MoreItem(Icons.Default.Sync, "Usage", "Requests, status and latency summary", onMonitoring)
         MoreItem(Icons.Default.Settings, "Settings", "Network, appearance and security", onSettings)
         MoreItem(Icons.Default.Security, "Backup & security", "Encrypted export and app lock")
         MoreItem(Icons.Default.SystemUpdate, "App updates", if (updateMessage.isBlank()) "Check GitHub for a newer APK" else updateMessage, onClick = onUpdate)
         Spacer(Modifier.weight(1f)); OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("JH GetWay v0.1.0") }
     }
+}
+
+@Composable
+private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
+    var section by remember { mutableIntStateOf(0) }
+    var logs by remember { mutableStateOf(stats.recent()) }
+    val total = logs.size
+    val success = logs.count { it.status in 200..299 }
+    val average = if (logs.isEmpty()) 0 else logs.map { it.latencyMs }.average().toInt()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (section == 0) "Request logs" else "Usage") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(section == 0, { section = 0 }, label = { Text("Logs") }); FilterChip(section == 1, { section = 1 }, label = { Text("Usage") }) }
+                if (section == 0) {
+                    if (logs.isEmpty()) Text("No requests yet. Start the gateway and connect a coding tool.", color = Muted)
+                    else LazyColumn(Modifier.height(300.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(logs) { log ->
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F6FA))) { Column(Modifier.fillMaxWidth().padding(10.dp)) { Row { Text(log.provider ?: "No provider", fontWeight = FontWeight.SemiBold, color = Navy); Spacer(Modifier.weight(1f)); Text("HTTP ${log.status}", color = if (log.status in 200..299) Green else Color(0xFFD64545), style = MaterialTheme.typography.labelSmall) }; Text("${log.endpoint} · ${log.latencyMs}ms", color = Muted, style = MaterialTheme.typography.bodySmall); Text(SimpleDateFormat("MMM d, HH:mm:ss", Locale.US).format(Date(log.time)), color = Muted, style = MaterialTheme.typography.labelSmall) } }
+                    } }
+                } else {
+                    MetricCard("Total requests", total.toString(), Icons.Default.Sync, Modifier.fillMaxWidth())
+                    MetricCard("Successful", success.toString(), Icons.Default.CheckCircle, Modifier.fillMaxWidth())
+                    MetricCard("Errors", (total - success).coerceAtLeast(0).toString(), Icons.Default.Warning, Modifier.fillMaxWidth())
+                    Text("Average latency: ${average}ms", color = Muted)
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text("Done") } },
+        dismissButton = { TextButton(onClick = { stats.clear(); logs = emptyList() }) { Text("Clear logs") } }
+    )
 }
 
 @Composable

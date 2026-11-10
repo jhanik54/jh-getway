@@ -28,5 +28,8 @@ class GatewayStats(context: Context) {
 
     fun requestCount(): Int = prefs.getInt(REQUESTS, 0)
 
+    @Synchronized
+    fun clear() { prefs.edit().remove(LOGS).remove(REQUESTS).apply() }
+
     companion object { private const val LOGS = "logs"; private const val REQUESTS = "requests" }
 }
