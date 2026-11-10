@@ -6,6 +6,9 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
+import android.os.PowerManager
+import android.net.wifi.WifiManager
+import android.app.PendingIntent
 import androidx.core.app.NotificationCompat
 
 class GatewayService : Service() {
@@ -13,6 +16,8 @@ class GatewayService : Service() {
     private lateinit var providerStore: ProviderStore
     private lateinit var gatewaySecurity: GatewaySecurity
     private lateinit var gatewayStats: GatewayStats
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -28,12 +33,14 @@ class GatewayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             stopForeground(STOP_FOREGROUND_REMOVE)
+            releaseLocks()
             gatewayServer?.stop()
             gatewayServer = null
             stopSelf()
             return START_NOT_STICKY
         }
         startForeground(NOTIFICATION_ID, notification())
+        acquireLocks()
         if (gatewayServer == null) gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats).also { it.start() }
         return START_STICKY
     }
@@ -44,11 +51,20 @@ class GatewayService : Service() {
         .setContentText("Local gateway প্রস্তুত হচ্ছে")
         .setOngoing(true)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .addAction(NotificationCompat.Action(0, "Stop", PendingIntent.getService(this, 2, Intent(this, GatewayService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)))
         .build()
+
+    private fun acquireLocks() {
+        if (wakeLock == null) wakeLock = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "JHGetWay:Gateway").apply { setReferenceCounted(false); acquire() }
+        if (wifiLock == null) wifiLock = (getSystemService(WIFI_SERVICE) as WifiManager).createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "JHGetWay:Wifi").apply { setReferenceCounted(false); acquire() }
+    }
+
+    private fun releaseLocks() { wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null; wifiLock?.let { if (it.isHeld) it.release() }; wifiLock = null }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        releaseLocks()
         gatewayServer?.stop()
         gatewayServer = null
         super.onDestroy()
