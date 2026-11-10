@@ -206,12 +206,16 @@ private fun StoredProvider.toProviderKey(store: ProviderStore) = ProviderKey(
 
 @Composable
 private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, String, String, ProviderProtocol) -> Unit) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("https://api.openai.com") }
     var model by remember { mutableStateOf("auto") }
     var key by remember { mutableStateOf("") }
     var showPresets by remember { mutableStateOf(false) }
     var protocol by remember { mutableStateOf(ProviderProtocol.OPENAI) }
+    var models by remember { mutableStateOf<List<String>>(emptyList()) }
+    var fetching by remember { mutableStateOf(false) }
+    var fetchMessage by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add provider key") },
@@ -220,7 +224,20 @@ private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, St
             OutlinedButton(onClick = { showPresets = true }, modifier = Modifier.fillMaxWidth()) { Text(if (name.isBlank()) "Choose provider preset" else name) }
             OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
             OutlinedTextField(url, { url = it }, label = { Text("Base URL") }, singleLine = true)
-            OutlinedTextField(model, { model = it }, label = { Text("Default model") }, singleLine = true)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(model, { model = it }, label = { Text("Default model") }, singleLine = true, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(6.dp))
+                OutlinedButton(enabled = !fetching && url.isNotBlank() && key.isNotBlank(), onClick = {
+                    fetching = true; fetchMessage = "Fetching models…"
+                    val activity = context as? ComponentActivity
+                    ProviderModelFetcher.fetch(url, key, protocol) { result -> activity?.runOnUiThread { fetching = false; result.onSuccess { fetched -> models = fetched; fetchMessage = "${fetched.size} models found" }.onFailure { fetchMessage = it.message ?: "Model fetch failed" } } }
+                }) { Text(if (fetching) "…" else "Fetch") }
+            }
+            if (fetchMessage.isNotBlank()) Text(fetchMessage, color = if (models.isNotEmpty()) Green else Muted, style = MaterialTheme.typography.labelSmall)
+            if (models.isNotEmpty()) {
+                Text("Select a model", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelSmall)
+                Column(Modifier.height(120.dp)) { models.take(12).forEach { item -> FilterChip(selected = model == item, onClick = { model = item }, label = { Text(item, maxLines = 1) }) } }
+            }
             OutlinedTextField(key, { key = it }, label = { Text("API key") }, singleLine = true)
         } },
         confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key, protocol) }) { Text("Save securely") } },
