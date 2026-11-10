@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +58,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
@@ -128,6 +130,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var showUpdateDialog by remember { mutableStateOf(false) }
     var showChainDialog by remember { mutableStateOf(false) }
     var showMonitoringDialog by remember { mutableStateOf(false) }
+    var showBackupDialog by remember { mutableStateOf(false) }
     val gatewaySettings = remember { GatewaySettings(context) }
     val tabs = listOf("Home", "Providers", "More")
 
@@ -172,7 +175,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true })
-                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onChain = { showChainDialog = true }, onMonitoring = { showMonitoringDialog = true }, onUpdate = { showUpdateDialog = true })
+                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onChain = { showChainDialog = true }, onMonitoring = { showMonitoringDialog = true }, onBackup = { showBackupDialog = true }, onUpdate = { showUpdateDialog = true })
             }
         }
         if (showAddDialog) {
@@ -189,6 +192,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         if (showUpdateDialog) UpdateDialog(onDismiss = { showUpdateDialog = false })
         if (showChainDialog) ChainDialog(providerStore, onDismiss = { showChainDialog = false })
         if (showMonitoringDialog) MonitoringDialog(GatewayStats(context), onDismiss = { showMonitoringDialog = false })
+        if (showBackupDialog) BackupDialog(providerStore, onDismiss = { showBackupDialog = false })
     }
 }
 
@@ -372,17 +376,49 @@ private fun StatusPill(status: KeyStatus) {
 }
 
 @Composable
-private fun MoreScreen(modifier: Modifier, updateMessage: String, onSettings: () -> Unit, onChain: () -> Unit, onMonitoring: () -> Unit, onUpdate: () -> Unit) {
+private fun MoreScreen(modifier: Modifier, updateMessage: String, onSettings: () -> Unit, onChain: () -> Unit, onMonitoring: () -> Unit, onBackup: () -> Unit, onUpdate: () -> Unit) {
     Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.height(8.dp)); Text("More", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text("Control how JH GetWay works", color = Muted)
         MoreItem(Icons.Default.Storage, "Routing chain", "Set priority and fallback order", onChain)
         MoreItem(Icons.Default.Refresh, "Request logs", "Review provider switches and errors", onMonitoring)
         MoreItem(Icons.Default.Sync, "Usage", "Requests, status and latency summary", onMonitoring)
         MoreItem(Icons.Default.Settings, "Settings", "Network, appearance and security", onSettings)
-        MoreItem(Icons.Default.Security, "Backup & security", "Encrypted export and app lock")
+        MoreItem(Icons.Default.Security, "Backup & security", "Encrypted export and app lock", onBackup)
         MoreItem(Icons.Default.SystemUpdate, "App updates", if (updateMessage.isBlank()) "Check GitHub for a newer APK" else updateMessage, onClick = onUpdate)
         Spacer(Modifier.weight(1f)); OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("JH GetWay v0.1.0") }
     }
+}
+
+@Composable
+private fun BackupDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val backupManager = remember { BackupManager() }
+    var password by remember { mutableStateOf("") }
+    var pendingImport by remember { mutableStateOf<ByteArray?>(null) }
+    var showPassword by remember { mutableStateOf(false) }
+    var exportMode by remember { mutableStateOf(true) }
+    var replaceMode by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("Export your encrypted providers or import a backup file.") }
+    val createFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri == null) { status = "Export cancelled"; return@rememberLauncherForActivityResult }
+        runCatching { context.contentResolver.openOutputStream(uri)?.use { output -> output.write(backupManager.export(providerStore, password.toCharArray())) } ?: error("Could not open selected file") }.onSuccess { status = "Backup exported successfully" }.onFailure { status = "Export failed: ${it.message}" }
+    }
+    val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) { status = "Import cancelled"; return@rememberLauncherForActivityResult }
+        runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Could not read selected file") }.onSuccess { pendingImport = it; exportMode = false; showPassword = true }.onFailure { status = "Import failed: ${it.message}" }
+    }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Backup & restore") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(status, color = Muted, style = MaterialTheme.typography.bodySmall)
+            Button(onClick = { exportMode = true; showPassword = true }, modifier = Modifier.fillMaxWidth()) { Text("Export encrypted backup") }
+            OutlinedButton(onClick = { openFile.launch(arrayOf("application/octet-stream", "application/octet-stream+zip", "*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("Import backup") }
+            if (pendingImport != null) Row(verticalAlignment = Alignment.CenterVertically) { Text("Replace existing providers", Modifier.weight(1f)); Switch(replaceMode, { replaceMode = it }) }
+        }
+    }, confirmButton = { Button(onClick = onDismiss) { Text("Done") } })
+    if (showPassword) AlertDialog(onDismissRequest = { showPassword = false }, title = { Text(if (exportMode) "Set backup password" else "Backup password") }, text = { OutlinedTextField(password, { password = it }, label = { Text("Password (10+ characters)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true) }, confirmButton = { Button(enabled = password.length >= 10, onClick = {
+        if (exportMode) { showPassword = false; createFile.launch("jh-getway-backup.aigw") }
+        else { runCatching { backupManager.import(providerStore, pendingImport ?: error("No backup selected"), password.toCharArray(), replaceMode) }.onSuccess { status = "Backup imported successfully" }.onFailure { status = "Import failed: wrong password or damaged file" }; showPassword = false; pendingImport = null }
+    }) { Text("Continue") } }, dismissButton = { OutlinedButton(onClick = { showPassword = false }) { Text("Cancel") } })
 }
 
 @Composable
