@@ -56,6 +56,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
@@ -94,6 +95,19 @@ private val Navy = Color(0xFF111827)
 private val Blue = Color(0xFF4F67E8)
 private val Green = Color(0xFF16A36A)
 private val Muted = Color(0xFF667085)
+
+private data class ProviderPreset(val name: String, val url: String, val model: String)
+private val providerPresets = listOf(
+    ProviderPreset("OpenAI", "https://api.openai.com", "gpt-4o-mini"),
+    ProviderPreset("Anthropic", "https://api.anthropic.com", "claude-3-5-sonnet-latest"),
+    ProviderPreset("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.0-flash"),
+    ProviderPreset("OpenRouter", "https://openrouter.ai/api/v1", "auto"),
+    ProviderPreset("Groq", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+    ProviderPreset("DeepSeek", "https://api.deepseek.com", "deepseek-chat"),
+    ProviderPreset("Mistral", "https://api.mistral.ai/v1", "mistral-small-latest"),
+    ProviderPreset("OpenCode Zen", "https://opencode.ai/zen/v1", "auto"),
+    ProviderPreset("Custom OpenAI-compatible", "https://", "auto")
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -196,11 +210,13 @@ private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, St
     var url by remember { mutableStateOf("https://api.openai.com") }
     var model by remember { mutableStateOf("auto") }
     var key by remember { mutableStateOf("") }
+    var showPresets by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add provider key") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("OpenAI-compatible endpoint", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Text("Choose a provider preset or enter a custom endpoint", color = Muted, style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = { showPresets = true }, modifier = Modifier.fillMaxWidth()) { Text(if (name.isBlank()) "Choose provider preset" else name) }
             OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
             OutlinedTextField(url, { url = it }, label = { Text("Base URL") }, singleLine = true)
             OutlinedTextField(model, { model = it }, label = { Text("Default model") }, singleLine = true)
@@ -209,6 +225,14 @@ private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, St
         confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key) }) { Text("Save securely") } },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
     )
+    if (showPresets) {
+        AlertDialog(
+            onDismissRequest = { showPresets = false },
+            title = { Text("Provider presets") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { providerPresets.forEach { preset -> TextButton(onClick = { name = preset.name; url = preset.url; model = preset.model; showPresets = false }, modifier = Modifier.fillMaxWidth()) { Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) { Text(preset.name, fontWeight = FontWeight.SemiBold); Text(preset.url, color = Muted, style = MaterialTheme.typography.labelSmall) } } } } },
+            confirmButton = { OutlinedButton(onClick = { showPresets = false }) { Text("Cancel") } }
+        )
+    }
 }
 
 @Composable
