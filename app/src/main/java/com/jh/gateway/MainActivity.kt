@@ -73,6 +73,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(
@@ -121,6 +122,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var showAddDialog by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
     val gatewaySettings = remember { GatewaySettings(context) }
     val tabs = listOf("Home", "Providers", "More")
 
@@ -165,23 +167,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true })
-                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }) {
-                    updateMessage = "Checking for updates…"
-                    val activity = context as? ComponentActivity
-                    UpdateManager(context).check { result ->
-                        activity?.runOnUiThread {
-                            result.onSuccess { update ->
-                                if (update == null) updateMessage = "You are up to date"
-                                else {
-                                    updateMessage = "Downloading v${update.versionName}…"
-                                    UpdateManager(context).downloadAndInstall(update) { download ->
-                                        activity.runOnUiThread { updateMessage = download.fold({ "Installer opened" }, { "Update failed: ${it.message}" }) }
-                                    }
-                                }
-                            }.onFailure { updateMessage = "Update check failed" }
-                        }
-                    }
-                }
+                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onUpdate = { showUpdateDialog = true })
             }
         }
         if (showAddDialog) {
@@ -195,6 +181,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
             )
         }
         if (showSettings) SettingsDialog(gatewaySettings, onDismiss = { showSettings = false })
+        if (showUpdateDialog) UpdateDialog(onDismiss = { showUpdateDialog = false })
     }
 }
 
@@ -403,6 +390,49 @@ private fun SettingsDialog(settings: GatewaySettings, onDismiss: () -> Unit) {
             OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text("Port") }, singleLine = true)
         }
     }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; port.toIntOrNull()?.let { settings.port = it }; onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
+}
+
+@Composable
+private fun UpdateDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
+    val manager = remember { UpdateManager(context) }
+    var update by remember { mutableStateOf<AvailableUpdate?>(null) }
+    var downloadedFile by remember { mutableStateOf<File?>(null) }
+    var status by remember { mutableStateOf("Tap Check now to look for a new release.") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("App updates") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Current version ${BuildConfig.VERSION_NAME}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text(status, color = Muted)
+                update?.let { available ->
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F6FA))) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("New version ${available.versionName}", fontWeight = FontWeight.Bold, color = Navy)
+                            Text(available.notes, color = Muted, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    TextButton(onClick = { manager.openReleasePage(available) }) { Text("Open GitHub release page") }
+                }
+            }
+        },
+        confirmButton = {
+            when {
+                downloadedFile != null -> Button(onClick = { manager.install(downloadedFile!!) { status = it } }) { Text("Install update") }
+                update != null -> Button(onClick = {
+                    status = "Download started. Android Download Manager is handling it…"
+                    manager.download(update!!) { result -> activity?.runOnUiThread { result.onSuccess { downloadedFile = it; status = "Download complete. Tap Install update." }.onFailure { status = "Download failed: ${it.message}" } } }
+                }) { Text("Download update") }
+                else -> Button(onClick = {
+                    status = "Checking GitHub releases…"
+                    manager.check { result -> activity?.runOnUiThread { result.onSuccess { found -> update = found; status = if (found == null) "You are up to date." else "New update found." }.onFailure { status = "Check failed: ${it.message}" } } }
+                }) { Text("Check now") }
+            }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Close") } }
+    )
 }
 
 @Composable
