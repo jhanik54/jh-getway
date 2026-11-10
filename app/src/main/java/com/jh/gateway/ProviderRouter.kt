@@ -32,7 +32,7 @@ class ProviderRouter(private val store: ProviderStore) {
         if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are unavailable\",\"type\":\"gateway_unavailable\"}}")
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
-            val connection = runCatching { open(provider, key, body) }.getOrNull() ?: continue
+            val connection = runCatching { open(provider, key, ProtocolAdapter.toProvider(body, provider)) }.getOrNull() ?: continue
             val status = connection.responseCode
             if (status in 200..299) {
                 connection.inputStream.use { it.copyTo(output) }
@@ -52,21 +52,21 @@ class ProviderRouter(private val store: ProviderStore) {
     }
 
     private fun request(provider: StoredProvider, key: String, body: String): ForwardResult {
-        val connection = open(provider, key, body)
+        val connection = open(provider, key, ProtocolAdapter.toProvider(body, provider))
         val status = connection.responseCode
         val stream = if (status >= 400) connection.errorStream else connection.inputStream
         val response = stream?.bufferedReader()?.use { it.readText() } ?: ""
         connection.disconnect()
-        return ForwardResult(status, response)
+        return ForwardResult(status, ProtocolAdapter.fromProvider(response, provider))
     }
 
     private fun open(provider: StoredProvider, key: String, body: String): HttpURLConnection {
-        val connection = (URL(endpoint(provider.baseUrl)).openConnection() as HttpURLConnection).apply {
+        val connection = (URL(endpoint(provider.baseUrl, provider.protocol)).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 15_000
             readTimeout = 120_000
             doOutput = true
-            setRequestProperty("Authorization", "Bearer $key")
+            if (provider.protocol == ProviderProtocol.ANTHROPIC) { setRequestProperty("x-api-key", key); setRequestProperty("anthropic-version", "2023-06-01") } else setRequestProperty("Authorization", "Bearer $key")
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Accept", "application/json")
         }
@@ -74,6 +74,6 @@ class ProviderRouter(private val store: ProviderStore) {
         return connection
     }
 
-    private fun endpoint(base: String): String = if (base.endsWith("/v1")) "$base/chat/completions" else "$base/v1/chat/completions"
+    private fun endpoint(base: String, protocol: ProviderProtocol): String = if (protocol == ProviderProtocol.ANTHROPIC) { if (base.endsWith("/v1")) "$base/messages" else "$base/v1/messages" } else if (base.endsWith("/v1")) "$base/chat/completions" else "$base/v1/chat/completions"
     private fun escape(value: String) = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ")
 }

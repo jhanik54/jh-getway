@@ -96,10 +96,10 @@ private val Blue = Color(0xFF4F67E8)
 private val Green = Color(0xFF16A36A)
 private val Muted = Color(0xFF667085)
 
-private data class ProviderPreset(val name: String, val url: String, val model: String)
+private data class ProviderPreset(val name: String, val url: String, val model: String, val protocol: ProviderProtocol = ProviderProtocol.OPENAI)
 private val providerPresets = listOf(
     ProviderPreset("OpenAI", "https://api.openai.com", "gpt-4o-mini"),
-    ProviderPreset("Anthropic", "https://api.anthropic.com", "claude-3-5-sonnet-latest"),
+    ProviderPreset("Anthropic", "https://api.anthropic.com", "claude-3-5-sonnet-latest", ProviderProtocol.ANTHROPIC),
     ProviderPreset("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.0-flash"),
     ProviderPreset("OpenRouter", "https://openrouter.ai/api/v1", "auto"),
     ProviderPreset("Groq", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
@@ -187,8 +187,8 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         if (showAddDialog) {
             AddProviderDialog(
                 onDismiss = { showAddDialog = false },
-                onSave = { name, url, model, key ->
-                    providerStore.add(name, url, model, key)
+                onSave = { name, url, model, key, protocol ->
+                    providerStore.add(name, url, model, key, protocol)
                     keys = providerStore.list().map { it.toProviderKey(providerStore) }
                     showAddDialog = false
                 }
@@ -205,12 +205,13 @@ private fun StoredProvider.toProviderKey(store: ProviderStore) = ProviderKey(
 )
 
 @Composable
-private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
+private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, String, String, ProviderProtocol) -> Unit) {
     var name by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("https://api.openai.com") }
     var model by remember { mutableStateOf("auto") }
     var key by remember { mutableStateOf("") }
     var showPresets by remember { mutableStateOf(false) }
+    var protocol by remember { mutableStateOf(ProviderProtocol.OPENAI) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add provider key") },
@@ -222,14 +223,14 @@ private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, St
             OutlinedTextField(model, { model = it }, label = { Text("Default model") }, singleLine = true)
             OutlinedTextField(key, { key = it }, label = { Text("API key") }, singleLine = true)
         } },
-        confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key) }) { Text("Save securely") } },
+        confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key, protocol) }) { Text("Save securely") } },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
     )
     if (showPresets) {
         AlertDialog(
             onDismissRequest = { showPresets = false },
             title = { Text("Provider presets") },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { providerPresets.forEach { preset -> TextButton(onClick = { name = preset.name; url = preset.url; model = preset.model; showPresets = false }, modifier = Modifier.fillMaxWidth()) { Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) { Text(preset.name, fontWeight = FontWeight.SemiBold); Text(preset.url, color = Muted, style = MaterialTheme.typography.labelSmall) } } } } },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { providerPresets.forEach { preset -> TextButton(onClick = { name = preset.name; url = preset.url; model = preset.model; protocol = preset.protocol; showPresets = false }, modifier = Modifier.fillMaxWidth()) { Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) { Text(preset.name, fontWeight = FontWeight.SemiBold); Text(preset.url, color = Muted, style = MaterialTheme.typography.labelSmall) } } } } },
             confirmButton = { OutlinedButton(onClick = { showPresets = false }) { Text("Cancel") } }
         )
     }

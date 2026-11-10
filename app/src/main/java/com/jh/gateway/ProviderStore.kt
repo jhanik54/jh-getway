@@ -14,12 +14,15 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+enum class ProviderProtocol { OPENAI, ANTHROPIC }
+
 data class StoredProvider(
     val id: String,
     val name: String,
     val baseUrl: String,
     val model: String,
     val priority: Int,
+    val protocol: ProviderProtocol = ProviderProtocol.OPENAI,
     val enabled: Boolean = true,
     val cooldownUntil: Long = 0L
 ) {
@@ -38,15 +41,15 @@ class ProviderStore(context: Context) {
         val array = JSONArray(prefs.getString(PROVIDERS, "[]"))
         (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
-            StoredProvider(item.getString("id"), item.getString("name"), item.getString("baseUrl"), item.getString("model"), item.getInt("priority"), item.optBoolean("enabled", true), item.optLong("cooldownUntil", 0L))
+            StoredProvider(item.getString("id"), item.getString("name"), item.getString("baseUrl"), item.getString("model"), item.getInt("priority"), runCatching { ProviderProtocol.valueOf(item.optString("protocol", "OPENAI")) }.getOrDefault(ProviderProtocol.OPENAI), item.optBoolean("enabled", true), item.optLong("cooldownUntil", 0L))
         }.sortedBy { it.priority }
     }.getOrDefault(emptyList())
 
     @Synchronized
-    fun add(name: String, baseUrl: String, model: String, apiKey: String) {
+    fun add(name: String, baseUrl: String, model: String, apiKey: String, protocol: ProviderProtocol = ProviderProtocol.OPENAI) {
         require(list().none { apiKey(it) == apiKey }) { "This API key is already configured" }
         val id = "provider_${System.currentTimeMillis()}"
-        val provider = StoredProvider(id, name.trim(), baseUrl.trim().trimEnd('/'), model.trim().ifBlank { "auto" }, list().size + 1)
+        val provider = StoredProvider(id, name.trim(), baseUrl.trim().trimEnd('/'), model.trim().ifBlank { "auto" }, list().size + 1, protocol)
         save(list() + provider)
         prefs.edit().putString(keyName(id), encrypt(apiKey)).apply()
     }
@@ -66,7 +69,7 @@ class ProviderStore(context: Context) {
     @Synchronized
     fun exportPayload(): String {
         val array = JSONArray()
-        list().forEach { provider -> array.put(JSONObject().apply { put("name", provider.name); put("baseUrl", provider.baseUrl); put("model", provider.model); put("priority", provider.priority); put("apiKey", apiKey(provider).orEmpty()) }) }
+        list().forEach { provider -> array.put(JSONObject().apply { put("name", provider.name); put("baseUrl", provider.baseUrl); put("model", provider.model); put("priority", provider.priority); put("protocol", provider.protocol.name); put("apiKey", apiKey(provider).orEmpty()) }) }
         return array.toString()
     }
 
@@ -77,13 +80,13 @@ class ProviderStore(context: Context) {
         for (index in 0 until incoming.length()) {
             val item = incoming.getJSONObject(index)
             val key = item.optString("apiKey")
-            if (key.isNotBlank() && list().none { apiKey(it) == key }) add(item.optString("name", "Imported provider"), item.getString("baseUrl"), item.optString("model", "auto"), key)
+            if (key.isNotBlank() && list().none { apiKey(it) == key }) add(item.optString("name", "Imported provider"), item.getString("baseUrl"), item.optString("model", "auto"), key, runCatching { ProviderProtocol.valueOf(item.optString("protocol", "OPENAI")) }.getOrDefault(ProviderProtocol.OPENAI))
         }
     }
 
     private fun save(providers: List<StoredProvider>) {
         val array = JSONArray()
-        providers.forEach { p -> array.put(JSONObject().apply { put("id", p.id); put("name", p.name); put("baseUrl", p.baseUrl); put("model", p.model); put("priority", p.priority); put("enabled", p.enabled); put("cooldownUntil", p.cooldownUntil) }) }
+        providers.forEach { p -> array.put(JSONObject().apply { put("id", p.id); put("name", p.name); put("baseUrl", p.baseUrl); put("model", p.model); put("priority", p.priority); put("protocol", p.protocol.name); put("enabled", p.enabled); put("cooldownUntil", p.cooldownUntil) }) }
         prefs.edit().putString(PROVIDERS, array.toString()).apply()
     }
 
