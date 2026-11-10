@@ -24,12 +24,12 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
                 )
             }
             get("/v1/models") {
-                if (!authorized()) return@get
+                if (!call.authorized()) return@get
                 val models = store.list().filter { it.enabled }.joinToString(",") { "{\"id\":\"${escape(it.model)}\",\"object\":\"model\",\"owned_by\":\"${escape(it.name)}\"}" }
                 call.respondText("{\"object\":\"list\",\"data\":[$models]}", ContentType.Application.Json)
             }
             post("/v1/chat/completions") {
-                if (!authorized()) return@post
+                if (!call.authorized()) return@post
                 val result = router.forward(call.receiveText())
                 call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
             }
@@ -39,7 +39,7 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
     private suspend fun io.ktor.server.application.ApplicationCall.authorized(): Boolean {
         val bearer = request.headers[HttpHeaders.Authorization]
         val apiKey = request.headers["x-api-key"]
-        if (security.isAuthorized(bearer ?: apiKey, request.origin.remoteHost)) return true
+        if (security.isAuthorized(bearer ?: apiKey, request.local.remoteHost)) return true
         respondText("{\"error\":{\"message\":\"Invalid or missing gateway key\",\"type\":\"authentication_error\"}}", ContentType.Application.Json, HttpStatusCode.Unauthorized)
         return false
     }
