@@ -94,3 +94,4 @@ jobs:
             - Model aliases and provider-specific upstream model mapping
             - Priority/Round Robin routing selector and TTL-based sticky sessions
             - LAN IP allowlist, per-IP rate limiting, and protocol adapter fixture tests
+            - Compile-fix follow-up for the security/test batch

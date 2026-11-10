@@ -17,8 +17,8 @@ android {
         applicationId = "com.jh.gateway"
         minSdk = 26
         targetSdk = 35
-        versionCode = 29
-        versionName = "0.4.7"
+        versionCode = 30
+        versionName = "0.4.8"
     }
 
     val stableStore = file(System.getenv("JH_SIGNING_STORE") ?: "${System.getProperty("user.home")}/.android/jh-getway-release.keystore")
