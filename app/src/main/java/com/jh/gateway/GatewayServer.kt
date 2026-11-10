@@ -14,7 +14,7 @@ import io.ktor.server.routing.routing
 import io.ktor.http.HttpStatusCode
 
 /** Local-only HTTP surface. Provider forwarding is the next milestone. */
-class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val port: Int = 8787) {
+class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val stats: GatewayStats, private val port: Int = 8787) {
     private val router = ProviderRouter(store)
     private val server = embeddedServer(CIO, host = "127.0.0.1", port = port) {
         routing {
@@ -29,13 +29,20 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
                 val models = store.list().filter { it.enabled }.joinToString(",") { "{\"id\":\"${escape(it.model)}\",\"object\":\"model\",\"owned_by\":\"${escape(it.name)}\"}" }
                 call.respondText("{\"object\":\"list\",\"data\":[$models]}", ContentType.Application.Json)
             }
+            get("/v1/gateway/logs") {
+                if (!call.authorized()) return@get
+                val data = stats.recent().joinToString(",") { "{\"time\":${it.time},\"endpoint\":\"${escape(it.endpoint)}\",\"status\":${it.status},\"provider\":\"${escape(it.provider ?: "")}\",\"latencyMs\":${it.latencyMs}}" }
+                call.respondText("{\"object\":\"list\",\"data\":[$data]}", ContentType.Application.Json)
+            }
             post("/v1/chat/completions") {
                 if (!call.authorized()) return@post
                 val body = call.receiveText()
                 if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
                     call.respondOutputStream(ContentType.Text.EventStream) { router.stream(body, this) }
                 } else {
+                    val started = System.currentTimeMillis()
                     val result = router.forward(body)
+                    stats.record("/v1/chat/completions", result.status, result.provider, System.currentTimeMillis() - started)
                     call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
                 }
             }

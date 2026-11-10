@@ -3,12 +3,14 @@ package com.jh.gateway
 import java.net.HttpURLConnection
 import java.net.URL
 import java.io.OutputStream
+import org.json.JSONObject
 
 data class ForwardResult(val status: Int, val body: String, val provider: String? = null)
 
 class ProviderRouter(private val store: ProviderStore) {
     fun forward(body: String): ForwardResult {
-        val candidates = store.list().filter { it.enabled && !it.isCoolingDown }
+        val requestedModel = runCatching { JSONObject(body).optString("model", "auto") }.getOrDefault("auto")
+        val candidates = eligible(requestedModel)
         if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are disabled or cooling down\",\"type\":\"gateway_unavailable\"}}")
         var last = ForwardResult(502, "{\"error\":{\"message\":\"No provider response\",\"type\":\"provider_error\"}}")
         for (provider in candidates) {
@@ -25,7 +27,8 @@ class ProviderRouter(private val store: ProviderStore) {
 
     /** Transparent SSE pass-through. Fallback is still possible until the first upstream byte. */
     fun stream(body: String, output: OutputStream): ForwardResult {
-        val candidates = store.list().filter { it.enabled && !it.isCoolingDown }
+        val requestedModel = runCatching { JSONObject(body).optString("model", "auto") }.getOrDefault("auto")
+        val candidates = eligible(requestedModel)
         if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are unavailable\",\"type\":\"gateway_unavailable\"}}")
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
@@ -42,6 +45,10 @@ class ProviderRouter(private val store: ProviderStore) {
             connection.disconnect()
         }
         return ForwardResult(502, "{\"error\":{\"message\":\"All providers failed before streaming\",\"type\":\"provider_error\"}}")
+    }
+
+    private fun eligible(requestedModel: String): List<StoredProvider> = store.list().filter { provider ->
+        provider.enabled && !provider.isCoolingDown && (requestedModel.isBlank() || requestedModel == "auto" || provider.model == "auto" || provider.model == requestedModel)
     }
 
     private fun request(provider: StoredProvider, key: String, body: String): ForwardResult {

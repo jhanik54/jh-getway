@@ -12,11 +12,13 @@ class GatewayService : Service() {
     private var gatewayServer: GatewayServer? = null
     private lateinit var providerStore: ProviderStore
     private lateinit var gatewaySecurity: GatewaySecurity
+    private lateinit var gatewayStats: GatewayStats
 
     override fun onCreate() {
         super.onCreate()
         providerStore = ProviderStore(this)
         gatewaySecurity = GatewaySecurity(this)
+        gatewayStats = GatewayStats(this)
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Gateway", NotificationManager.IMPORTANCE_LOW)
@@ -32,7 +34,7 @@ class GatewayService : Service() {
             return START_NOT_STICKY
         }
         startForeground(NOTIFICATION_ID, notification())
-        if (gatewayServer == null) gatewayServer = GatewayServer(providerStore, gatewaySecurity).also { it.start() }
+        if (gatewayServer == null) gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats).also { it.start() }
         return START_STICKY
     }
 
