@@ -632,8 +632,27 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
     var update by remember { mutableStateOf(manager.cachedUpdate()) }
     var downloadedFile by remember { mutableStateOf(manager.existingApk()) }
     var downloading by remember { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf(if (downloadedFile != null) "A downloaded update is ready to install." else "Tap Check now to look for a new release.") }
+    fun checkLatest() {
+        if (checking || downloading) return
+        checking = true
+        status = "Checking GitHub releases…"
+        manager.check { result -> activity?.runOnUiThread {
+            checking = false
+            result.onSuccess { found ->
+                update = found ?: manager.cachedUpdate()
+                status = if (found == null) {
+                    if (update == null) "You are up to date." else "Saved update is still available."
+                } else "New update found."
+            }.onFailure { error ->
+                val saved = manager.cachedUpdate()
+                update = saved
+                status = if (saved != null) "Check failed; saved update is still available." else "Check failed: ${error.message ?: "network error"}"
+            }
+        } }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("App updates") },
@@ -643,6 +662,7 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                 Text(status, color = Muted)
                 if (downloading) LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
                 if (downloading) Text("$progress% · Saved inside JH GetWay", color = Muted, style = MaterialTheme.typography.labelSmall)
+                if ((update != null || downloadedFile != null) && !downloading) TextButton(enabled = !checking, onClick = ::checkLatest) { Text(if (checking) "Checking…" else "Check again") }
                 update?.let { available ->
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F6FA))) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -662,11 +682,7 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                     downloading = true; progress = 0; status = "Downloading inside JH GetWay…"
                     manager.download(update!!, { value -> activity?.runOnUiThread { progress = value } }) { result -> activity?.runOnUiThread { downloading = false; result.onSuccess { downloadedFile = it; progress = 100; status = "Download complete. Tap Install update." }.onFailure { status = "Download failed: ${it.message}" } } }
                 }) { Text("Download update") }
-                else -> Button(onClick = {
-                    update = null
-                    status = "Checking GitHub releases…"
-                    manager.check { result -> activity?.runOnUiThread { result.onSuccess { found -> update = found; status = if (found == null) "You are up to date." else "New update found." }.onFailure { status = "Check failed: ${it.message}" } } }
-                }) { Text("Check for updates") }
+                else -> Button(enabled = !checking, onClick = ::checkLatest) { Text(if (checking) "Checking…" else "Check for updates") }
             }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Close") } }

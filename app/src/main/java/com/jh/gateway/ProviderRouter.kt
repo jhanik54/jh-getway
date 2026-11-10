@@ -15,11 +15,12 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         var last = ForwardResult(502, "{\"error\":{\"message\":\"No provider response\",\"type\":\"provider_error\"}}")
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
-            last = runCatching { request(provider, key, body) }.getOrElse { ForwardResult(502, "{\"error\":{\"message\":\"${escape(it.message ?: "Network error")}\",\"type\":\"network_error\"}}") }
+            last = runCatching { request(provider, key, body) }.getOrElse { ForwardResult(502, "{\"error\":{\"message\":\"${escape(it.message ?: "Network error")}\",\"type\":\"network_error\"}}", provider.name) }
             when {
                 last.status in 200..299 -> return last.copy(provider = provider.name)
                 last.status == 401 || last.status == 403 -> store.disable(provider)
                 last.status == 429 -> store.markCooldown(provider, 60_000)
+                last.status >= 500 -> store.markCooldown(provider, 30_000)
             }
         }
         return last
@@ -32,7 +33,9 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are unavailable\",\"type\":\"gateway_unavailable\"}}")
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
-            val connection = runCatching { open(provider, key, ProtocolAdapter.toProvider(body, provider)) }.getOrNull() ?: continue
+            val connectionResult = runCatching { open(provider, key, ProtocolAdapter.toProvider(body, provider)) }
+            if (connectionResult.isFailure) { store.markCooldown(provider, 30_000); continue }
+            val connection = connectionResult.getOrThrow()
             val status = connection.responseCode
             if (status in 200..299) {
                 connection.inputStream.use { it.copyTo(output) }
@@ -42,6 +45,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             }
             if (status == 401 || status == 403) store.disable(provider)
             if (status == 429) store.markCooldown(provider, 60_000)
+            if (status >= 500) store.markCooldown(provider, 30_000)
             connection.disconnect()
         }
         return ForwardResult(502, "{\"error\":{\"message\":\"All providers failed before streaming\",\"type\":\"provider_error\"}}")

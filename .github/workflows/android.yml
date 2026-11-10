@@ -73,3 +73,4 @@ jobs:
             - Stale APK cleanup and reliable forced update check
             - Persistent pending-update queue with retry after closing the app
             - Persistent Light, Dark, and System appearance modes
+            - Updater retry state and provider cooldown on transient server failures

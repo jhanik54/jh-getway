@@ -35,7 +35,7 @@ class UpdateManager(private val context: Context) {
                 if (found == null) clearCachedUpdate() else cacheUpdate(found)
                 found
             }
-            onResult(result.recoverCatching { cachedUpdate() })
+            onResult(result)
         }.start()
     }
 
