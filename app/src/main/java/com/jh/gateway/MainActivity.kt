@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -103,6 +104,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     val gatewaySecurity = remember { GatewaySecurity(context) }
     var keys by remember { mutableStateOf(providerStore.list().map { it.toProviderKey(providerStore) }) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf("") }
     val tabs = listOf("Home", "Providers", "More")
 
     MaterialTheme(colorScheme = androidx.compose.material3.lightColorScheme(primary = Blue)) {
@@ -146,7 +148,23 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true })
-                else -> MoreScreen(Modifier.padding(padding))
+                else -> MoreScreen(Modifier.padding(padding), updateMessage) {
+                    updateMessage = "Checking for updates…"
+                    val activity = context as? ComponentActivity
+                    UpdateManager(context).check { result ->
+                        activity?.runOnUiThread {
+                            result.onSuccess { update ->
+                                if (update == null) updateMessage = "You are up to date"
+                                else {
+                                    updateMessage = "Downloading v${update.versionName}…"
+                                    UpdateManager(context).downloadAndInstall(update) { download ->
+                                        activity.runOnUiThread { updateMessage = download.fold({ "Installer opened" }, { "Update failed: ${it.message}" }) }
+                                    }
+                                }
+                            }.onFailure { updateMessage = "Update check failed" }
+                        }
+                    }
+                }
             }
         }
         if (showAddDialog) {
@@ -314,20 +332,21 @@ private fun StatusPill(status: KeyStatus) {
 }
 
 @Composable
-private fun MoreScreen(modifier: Modifier) {
+private fun MoreScreen(modifier: Modifier, updateMessage: String, onUpdate: () -> Unit) {
     Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.height(8.dp)); Text("More", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text("Control how JH GetWay works", color = Muted)
         MoreItem(Icons.Default.Storage, "Routing chain", "Set priority and fallback order")
         MoreItem(Icons.Default.Refresh, "Request logs", "Review provider switches and errors")
         MoreItem(Icons.Default.Settings, "Settings", "Network, appearance and security")
         MoreItem(Icons.Default.Security, "Backup & security", "Encrypted export and app lock")
+        MoreItem(Icons.Default.SystemUpdate, "App updates", if (updateMessage.isBlank()) "Check GitHub for a newer APK" else updateMessage, onClick = onUpdate)
         Spacer(Modifier.weight(1f)); OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("JH GetWay v0.1.0") }
     }
 }
 
 @Composable
-private fun MoreItem(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String) {
-    Card(onClick = {}, colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE6EAF0))) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = Blue, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(14.dp)); Column { Text(title, fontWeight = FontWeight.SemiBold, color = Navy); Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall) }; Spacer(Modifier.weight(1f)); Text("›", style = MaterialTheme.typography.headlineSmall, color = Muted) } }
+private fun MoreItem(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, onClick: () -> Unit = {}) {
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE6EAF0))) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = Blue, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(14.dp)); Column { Text(title, fontWeight = FontWeight.SemiBold, color = Navy); Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall) }; Spacer(Modifier.weight(1f)); Text("›", style = MaterialTheme.typography.headlineSmall, color = Muted) } }
 }
 
 @Composable

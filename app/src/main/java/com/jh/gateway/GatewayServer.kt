@@ -7,6 +7,7 @@ import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
+import io.ktor.server.response.respondOutputStream
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
@@ -30,9 +31,16 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
             }
             post("/v1/chat/completions") {
                 if (!call.authorized()) return@post
-                val result = router.forward(call.receiveText())
-                call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
+                val body = call.receiveText()
+                if (body.contains("\"stream\"\s*:\s*true".toRegex())) {
+                    call.respondOutputStream(ContentType.Text.EventStream) { router.stream(body, this) }
+                } else {
+                    val result = router.forward(body)
+                    call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
+                }
             }
+            post("/v1/messages") { if (!call.authorized()) return@post; val result = router.forward(call.receiveText()); call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
+            post("/v1/responses") { if (!call.authorized()) return@post; val result = router.forward(call.receiveText()); call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
         }
     }
 

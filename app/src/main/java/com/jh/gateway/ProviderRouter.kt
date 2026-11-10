@@ -1,8 +1,8 @@
 package com.jh.gateway
 
-import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.io.OutputStream
 
 data class ForwardResult(val status: Int, val body: String, val provider: String? = null)
 
@@ -23,7 +23,37 @@ class ProviderRouter(private val store: ProviderStore) {
         return last
     }
 
+    /** Transparent SSE pass-through. Fallback is still possible until the first upstream byte. */
+    fun stream(body: String, output: OutputStream): ForwardResult {
+        val candidates = store.list().filter { it.enabled && !it.isCoolingDown }
+        if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are unavailable\",\"type\":\"gateway_unavailable\"}}")
+        for (provider in candidates) {
+            val key = store.apiKey(provider) ?: continue
+            val connection = runCatching { open(provider, key, body) }.getOrNull() ?: continue
+            val status = connection.responseCode
+            if (status in 200..299) {
+                connection.inputStream.use { it.copyTo(output) }
+                output.flush()
+                connection.disconnect()
+                return ForwardResult(status, "", provider.name)
+            }
+            if (status == 401 || status == 403) store.disable(provider)
+            if (status == 429) store.markCooldown(provider, 60_000)
+            connection.disconnect()
+        }
+        return ForwardResult(502, "{\"error\":{\"message\":\"All providers failed before streaming\",\"type\":\"provider_error\"}}")
+    }
+
     private fun request(provider: StoredProvider, key: String, body: String): ForwardResult {
+        val connection = open(provider, key, body)
+        val status = connection.responseCode
+        val stream = if (status >= 400) connection.errorStream else connection.inputStream
+        val response = stream?.bufferedReader()?.use { it.readText() } ?: ""
+        connection.disconnect()
+        return ForwardResult(status, response)
+    }
+
+    private fun open(provider: StoredProvider, key: String, body: String): HttpURLConnection {
         val connection = (URL(endpoint(provider.baseUrl)).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 15_000
@@ -34,11 +64,7 @@ class ProviderRouter(private val store: ProviderStore) {
             setRequestProperty("Accept", "application/json")
         }
         connection.outputStream.use { it.write(body.toByteArray()) }
-        val status = connection.responseCode
-        val stream = if (status >= 400) connection.errorStream else connection.inputStream
-        val response = stream?.bufferedReader()?.use { it.readText() } ?: ""
-        connection.disconnect()
-        return ForwardResult(status, response)
+        return connection
     }
 
     private fun endpoint(base: String): String = if (base.endsWith("/v1")) "$base/chat/completions" else "$base/v1/chat/completions"
