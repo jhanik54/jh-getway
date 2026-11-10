@@ -71,3 +71,4 @@ jobs:
             - Official JH GetWay launcher logo supplied by the owner
             - Persistent downloaded update recovery after closing the update screen
             - Stale APK cleanup and reliable forced update check
+            - Persistent pending-update queue with retry after closing the app

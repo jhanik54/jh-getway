@@ -619,7 +619,7 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? ComponentActivity
     val manager = remember { UpdateManager(context) }
-    var update by remember { mutableStateOf<AvailableUpdate?>(null) }
+    var update by remember { mutableStateOf(manager.cachedUpdate()) }
     var downloadedFile by remember { mutableStateOf(manager.existingApk()) }
     var downloading by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }

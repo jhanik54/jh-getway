@@ -16,6 +16,7 @@ data class AvailableUpdate(val versionCode: Int, val versionName: String, val no
 /** App-owned updater: APK is stored under files/updates and remains available for later install. */
 class UpdateManager(private val context: Context) {
     private val latestReleaseApi = "https://api.github.com/repos/jhanik54/jh-getway/releases/latest"
+    private val updatePrefs = context.getSharedPreferences("pending_update", Context.MODE_PRIVATE)
 
     fun check(onResult: (Result<AvailableUpdate?>) -> Unit) {
         Thread {
@@ -30,11 +31,32 @@ class UpdateManager(private val context: Context) {
                 val asset = release.optJSONArray("assets")?.let { assets -> (0 until assets.length()).asSequence().map { assets.getJSONObject(it) }.firstOrNull { it.optString("name").endsWith(".apk") } } ?: error("No APK asset found")
                 val versionName = release.optString("tag_name", "v0.0.0").removePrefix("v")
                 val versionCode = versionName.substringBefore('.').toIntOrNull() ?: 0
-                if (versionCode > BuildConfig.VERSION_CODE) AvailableUpdate(versionCode, versionName, release.optString("body").ifBlank { "Performance improvements and bug fixes." }, asset.getString("browser_download_url"), release.optString("html_url")) else null
+                val found = if (versionCode > BuildConfig.VERSION_CODE) AvailableUpdate(versionCode, versionName, release.optString("body").ifBlank { "Performance improvements and bug fixes." }, asset.getString("browser_download_url"), release.optString("html_url")) else null
+                if (found == null) clearCachedUpdate() else cacheUpdate(found)
+                found
             }
-            onResult(result)
+            onResult(result.recoverCatching { cachedUpdate() })
         }.start()
     }
+
+    fun cachedUpdate(): AvailableUpdate? {
+        val cached = updatePrefs.getString("json", null) ?: return null
+        return runCatching {
+            val value = JSONObject(cached)
+            val versionCode = value.getInt("versionCode")
+            if (versionCode <= BuildConfig.VERSION_CODE) { clearCachedUpdate(); null }
+            else AvailableUpdate(versionCode, value.getString("versionName"), value.getString("notes"), value.getString("apkUrl"), value.getString("releaseUrl"))
+        }.getOrNull()
+    }
+
+    private fun cacheUpdate(update: AvailableUpdate) {
+        updatePrefs.edit().putString("json", JSONObject().apply {
+            put("versionCode", update.versionCode); put("versionName", update.versionName); put("notes", update.notes)
+            put("apkUrl", update.apkUrl); put("releaseUrl", update.releaseUrl)
+        }.toString()).apply()
+    }
+
+    private fun clearCachedUpdate() { updatePrefs.edit().remove("json").apply() }
 
     fun download(update: AvailableUpdate, onProgress: (Int) -> Unit, onResult: (Result<File>) -> Unit) {
         Thread {
