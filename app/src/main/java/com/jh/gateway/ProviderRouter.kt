@@ -46,17 +46,18 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             val connection = connectionResult.getOrThrow()
             val status = connection.responseCode
             if (status in 200..299) {
-                val event = StringBuilder()
-                connection.inputStream.bufferedReader().useLines { lines -> lines.forEach { line ->
-                    if (line.startsWith("event:")) event.setLength(0).also { event.append(line.substringAfter(':').trim()) }
-                    else if (line.startsWith("data:")) {
-                        val translated = ProtocolAdapter.translateStreamData(line.substringAfter(':').trim(), event.toString().ifBlank { null }, clientProtocol, provider.protocol)
-                        if (translated != null) { output.write(translated.toByteArray()); output.flush() }
-                    }
-                } }
-                connection.disconnect()
-                if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L) }
-                return ForwardResult(status, "", provider.name)
+                try {
+                    val event = StringBuilder()
+                    connection.inputStream.bufferedReader().useLines { lines -> lines.forEach { line ->
+                        if (line.startsWith("event:")) event.setLength(0).also { event.append(line.substringAfter(':').trim()) }
+                        else if (line.startsWith("data:")) {
+                            val translated = ProtocolAdapter.translateStreamData(line.substringAfter(':').trim(), event.toString().ifBlank { null }, clientProtocol, provider.protocol)
+                            if (translated != null) { output.write(translated.toByteArray()); output.flush() }
+                        }
+                    } }
+                    if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L) }
+                    return ForwardResult(status, "", provider.name)
+                } finally { connection.disconnect() }
             }
             if (status == 401 || status == 403) store.disable(provider)
             if (status == 429) store.markCooldown(provider, retryAfter(connection) ?: 60_000)

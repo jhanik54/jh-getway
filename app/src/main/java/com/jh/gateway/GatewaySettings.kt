@@ -17,4 +17,5 @@ class GatewaySettings(context: Context) {
     var stickySession: Boolean get() = prefs.getBoolean("sticky_session", true); set(value) { prefs.edit().putBoolean("sticky_session", value).apply() }
     var stickyTtlSeconds: Int get() = prefs.getInt("sticky_ttl_seconds", 1800); set(value) { prefs.edit().putInt("sticky_ttl_seconds", value.coerceIn(60, 86_400)).apply() }
     var ipAllowlist: String get() = prefs.getString("ip_allowlist", "") ?: ""; set(value) { prefs.edit().putString("ip_allowlist", value).apply() }
+    var maxConcurrent: Int get() = prefs.getInt("max_concurrent", 4); set(value) { prefs.edit().putInt("max_concurrent", value.coerceIn(1, 32)).apply() }
 }

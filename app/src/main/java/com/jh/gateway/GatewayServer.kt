@@ -13,10 +13,14 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.http.HttpStatusCode
 import org.json.JSONObject
+import io.ktor.util.AttributeKey
+import java.util.concurrent.Semaphore
 
 /** Local-only HTTP surface. Provider forwarding is the next milestone. */
 class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val stats: GatewayStats, private val settings: GatewaySettings, chainStore: ChainStore) {
     private val router = ProviderRouter(store, chainStore, settings)
+    private val requestPermits = Semaphore(settings.maxConcurrent, true)
+    private val permitKey = AttributeKey<Boolean>("jh-gateway-request-permit")
     private val server = embeddedServer(CIO, host = if (settings.wifiMode) "0.0.0.0" else "127.0.0.1", port = settings.port) {
         routing {
             get("/health") {
@@ -37,28 +41,36 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
             }
             post("/v1/chat/completions") {
                 if (!call.authorized()) return@post
-                val body = call.receiveValidatedBody() ?: return@post
-                if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
-                    call.respondOutputStream(ContentType.Text.EventStream) { router.stream(body, this, ClientProtocol.OPENAI) }
-                } else {
-                    val started = System.currentTimeMillis()
-                    val result = router.forward(body)
-                    stats.recordUsage(result.body)
-                    stats.record("/v1/chat/completions", result.status, result.provider, System.currentTimeMillis() - started)
-                    call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
+                try {
+                    val body = call.receiveValidatedBody() ?: return@post
+                    if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
+                        call.respondOutputStream(ContentType.Text.EventStream) { router.stream(body, this, ClientProtocol.OPENAI) }
+                    } else {
+                        val started = System.currentTimeMillis()
+                        val result = router.forward(body)
+                        stats.recordUsage(result.body)
+                        stats.record("/v1/chat/completions", result.status, result.provider, System.currentTimeMillis() - started)
+                        call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
+                    }
+                } finally {
+                    call.releasePermit()
                 }
             }
             post("/v1/messages") {
                 if (!call.authorized()) return@post
-                val body = call.receiveValidatedBody() ?: return@post
-                if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) call.respondOutputStream(ContentType.Text.EventStream) { router.stream(ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC), this, ClientProtocol.ANTHROPIC) }
-                else { val result = router.forward(ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC)); stats.recordUsage(result.body); call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.ANTHROPIC), ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
+                try {
+                    val body = call.receiveValidatedBody() ?: return@post
+                    if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) call.respondOutputStream(ContentType.Text.EventStream) { router.stream(ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC), this, ClientProtocol.ANTHROPIC) }
+                    else { val result = router.forward(ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC)); stats.recordUsage(result.body); call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.ANTHROPIC), ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
+                } finally { call.releasePermit() }
             }
             post("/v1/responses") {
                 if (!call.authorized()) return@post
-                val body = call.receiveValidatedBody() ?: return@post
-                if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) call.respondOutputStream(ContentType.Text.EventStream) { router.stream(ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES), this, ClientProtocol.RESPONSES) }
-                else { val result = router.forward(ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES)); stats.recordUsage(result.body); call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.RESPONSES), ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
+                try {
+                    val body = call.receiveValidatedBody() ?: return@post
+                    if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) call.respondOutputStream(ContentType.Text.EventStream) { router.stream(ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES), this, ClientProtocol.RESPONSES) }
+                    else { val result = router.forward(ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES)); stats.recordUsage(result.body); call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.RESPONSES), ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
+                } finally { call.releasePermit() }
             }
         }
     }
@@ -75,9 +87,19 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
             respondText("{\"error\":{\"message\":\"Too many requests from this IP\",\"type\":\"rate_limit_error\"}}", ContentType.Application.Json, HttpStatusCode.TooManyRequests)
             return false
         }
+        if (!requestPermits.tryAcquire()) {
+            respondText("{\"error\":{\"message\":\"Gateway concurrency limit reached\",\"type\":\"rate_limit_error\"}}", ContentType.Application.Json, HttpStatusCode.TooManyRequests)
+            return false
+        }
+        attributes.put(permitKey, true)
         if (security.isAuthorized(bearer ?: apiKey, remoteIp)) return true
+        releasePermit()
         respondText("{\"error\":{\"message\":\"Invalid or missing gateway key\",\"type\":\"authentication_error\"}}", ContentType.Application.Json, HttpStatusCode.Unauthorized)
         return false
+    }
+
+    private fun io.ktor.server.application.ApplicationCall.releasePermit() {
+        if (attributes.getOrNull(permitKey) == true) { requestPermits.release(); attributes.put(permitKey, false) }
     }
 
     private suspend fun io.ktor.server.application.ApplicationCall.receiveValidatedBody(): String? {

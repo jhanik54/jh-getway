@@ -588,6 +588,7 @@ private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> U
     var stickySession by remember { mutableStateOf(settings.stickySession) }
     var stickyTtl by remember { mutableStateOf(settings.stickyTtlSeconds.toString()) }
     var ipAllowlist by remember { mutableStateOf(settings.ipAllowlist) }
+    var maxConcurrent by remember { mutableStateOf(settings.maxConcurrent.toString()) }
     var port by remember { mutableStateOf(settings.port.toString()) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Gateway settings") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -611,9 +612,10 @@ private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> U
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Sticky session"); Text("Keep a conversation on the same provider until TTL expires", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(stickySession, { stickySession = it }) }
             if (stickySession) OutlinedTextField(stickyTtl, { stickyTtl = it.filter(Char::isDigit) }, label = { Text("Sticky TTL (seconds)") }, singleLine = true)
             if (wifi) OutlinedTextField(ipAllowlist, { ipAllowlist = it }, label = { Text("Allowed IPs (comma separated, blank = all LAN)") }, supportingText = { Text("Example: 192.168.1.10, 192.168.1.11") }, singleLine = true)
+            OutlinedTextField(maxConcurrent, { maxConcurrent = it.filter(Char::isDigit) }, label = { Text("Max concurrent requests (1–32)") }, singleLine = true)
             OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text("Port") }, singleLine = true)
         }
-    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.routingStrategy = routingStrategy; settings.stickySession = stickySession; settings.ipAllowlist = ipAllowlist; stickyTtl.toIntOrNull()?.let { settings.stickyTtlSeconds = it }; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.routingStrategy = routingStrategy; settings.stickySession = stickySession; settings.ipAllowlist = ipAllowlist; maxConcurrent.toIntOrNull()?.let { settings.maxConcurrent = it }; stickyTtl.toIntOrNull()?.let { settings.stickyTtlSeconds = it }; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 @Composable

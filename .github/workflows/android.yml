@@ -96,3 +96,4 @@ jobs:
             - LAN IP allowlist, per-IP rate limiting, and protocol adapter fixture tests
             - Compile-fix follow-up for the security/test batch
             - Android-runtime protocol fixture tests prepared for device execution
+            - Configurable concurrent request limit and upstream stream cleanup
