@@ -42,7 +42,6 @@ dependencies {
     // Gateway server foundation; request routing will be added in the next phase.
     implementation("io.ktor:ktor-server-core:3.0.2")
     implementation("io.ktor:ktor-server-cio:3.0.2")
-    implementation("io.ktor:ktor-server-routing:3.0.2")
     implementation("io.ktor:ktor-server-content-negotiation:3.0.2")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
