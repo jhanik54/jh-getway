@@ -92,3 +92,4 @@ jobs:
             - Retry-After aware provider cooldowns and visible LAN HTTP warning
             - Provider edit, test, enable/disable, and secure delete cleanup
             - Model aliases and provider-specific upstream model mapping
+            - Priority/Round Robin routing selector and TTL-based sticky sessions

@@ -11,7 +11,8 @@ data class ForwardResult(val status: Int, val body: String, val provider: String
 
 class ProviderRouter(private val store: ProviderStore, private val chainStore: ChainStore, private val settings: GatewaySettings) {
     private val roundRobin = ConcurrentHashMap<String, AtomicInteger>()
-    private val sticky = ConcurrentHashMap<String, String>()
+    private data class StickyRoute(val providerId: String, val expiresAt: Long)
+    private val sticky = ConcurrentHashMap<String, StickyRoute>()
     fun forward(body: String): ForwardResult {
         val requestedModel = runCatching { JSONObject(body).optString("model", "auto") }.getOrDefault("auto")
         val candidates = eligible(requestedModel, body)
@@ -22,7 +23,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             last = runCatching { request(provider, key, body) }.getOrElse { ForwardResult(502, "{\"error\":{\"message\":\"${escape(it.message ?: "Network error")}\",\"type\":\"network_error\"}}", provider.name) }
             when {
                 last.status in 200..299 -> {
-                    sessionKey(body)?.let { sticky[it] = provider.id }
+                    if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L) }
                     return last.copy(provider = provider.name)
                 }
                 last.status == 401 || last.status == 403 -> store.disable(provider)
@@ -54,7 +55,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
                     }
                 } }
                 connection.disconnect()
-                sessionKey(body)?.let { sticky[it] = provider.id }
+                if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L) }
                 return ForwardResult(status, "", provider.name)
             }
             if (status == 401 || status == 403) store.disable(provider)
@@ -71,8 +72,13 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         }
         val chain = chainStore.load(store.list()).filter { it.enabled }.withIndex().associate { it.value.id to (it.index to it.value.tier.ordinal) }
         val sorted = providers.sortedWith(compareBy({ chain[it.id]?.second ?: 0 }, { chain[it.id]?.first ?: Int.MAX_VALUE }, { it.priority }))
-        sessionKey(body)?.let { key -> sticky[key]?.let { id -> sorted.firstOrNull { it.id == id }?.let { selected -> return listOf(selected) + sorted.filterNot { it.id == selected.id } } } }
+        if (settings.stickySession) sessionKey(body)?.let { key ->
+            val saved = sticky[key]
+            if (saved != null && saved.expiresAt > System.currentTimeMillis()) sorted.firstOrNull { it.id == saved.providerId }?.let { selected -> return listOf(selected) + sorted.filterNot { it.id == selected.id } }
+            else sticky.remove(key)
+        }
         if (sorted.size < 2) return sorted
+        if (settings.routingStrategy == "PRIORITY") return sorted
         val bestTier = chain[sorted.first().id]?.second ?: 0
         val sameTier = sorted.filter { (chain[it.id]?.second ?: 0) == bestTier }
         if (sameTier.size < 2) return sorted

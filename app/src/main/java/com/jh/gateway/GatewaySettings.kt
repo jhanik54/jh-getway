@@ -13,4 +13,7 @@ class GatewaySettings(context: Context) {
     var theme: String get() = prefs.getString("theme", "LIGHT") ?: "LIGHT"; set(value) { prefs.edit().putString("theme", value).apply() }
     var connectTimeoutMs: Int get() = prefs.getInt("connect_timeout_ms", 15_000); set(value) { prefs.edit().putInt("connect_timeout_ms", value.coerceIn(3_000, 60_000)).apply() }
     var readTimeoutMs: Int get() = prefs.getInt("read_timeout_ms", 120_000); set(value) { prefs.edit().putInt("read_timeout_ms", value.coerceIn(10_000, 600_000)).apply() }
+    var routingStrategy: String get() = prefs.getString("routing_strategy", "PRIORITY") ?: "PRIORITY"; set(value) { prefs.edit().putString("routing_strategy", value).apply() }
+    var stickySession: Boolean get() = prefs.getBoolean("sticky_session", true); set(value) { prefs.edit().putBoolean("sticky_session", value).apply() }
+    var stickyTtlSeconds: Int get() = prefs.getInt("sticky_ttl_seconds", 1800); set(value) { prefs.edit().putInt("sticky_ttl_seconds", value.coerceIn(60, 86_400)).apply() }
 }

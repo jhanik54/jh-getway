@@ -584,6 +584,9 @@ private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> U
     var appLock by remember { mutableStateOf(settings.appLock) }
     var screenshotBlock by remember { mutableStateOf(settings.screenshotBlock) }
     var theme by remember { mutableStateOf(settings.theme) }
+    var routingStrategy by remember { mutableStateOf(settings.routingStrategy) }
+    var stickySession by remember { mutableStateOf(settings.stickySession) }
+    var stickyTtl by remember { mutableStateOf(settings.stickyTtlSeconds.toString()) }
     var port by remember { mutableStateOf(settings.port.toString()) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Gateway settings") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -599,9 +602,16 @@ private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> U
                 FilterChip(theme == "DARK", { theme = "DARK" }, label = { Text("Dark") })
                 FilterChip(theme == "SYSTEM", { theme = "SYSTEM" }, label = { Text("System") })
             }
+            Text("Routing strategy", fontWeight = FontWeight.SemiBold, color = Navy)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(routingStrategy == "PRIORITY", { routingStrategy = "PRIORITY" }, label = { Text("Priority") })
+                FilterChip(routingStrategy == "ROUND_ROBIN", { routingStrategy = "ROUND_ROBIN" }, label = { Text("Round Robin") })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Sticky session"); Text("Keep a conversation on the same provider until TTL expires", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(stickySession, { stickySession = it }) }
+            if (stickySession) OutlinedTextField(stickyTtl, { stickyTtl = it.filter(Char::isDigit) }, label = { Text("Sticky TTL (seconds)") }, singleLine = true)
             OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text("Port") }, singleLine = true)
         }
-    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.routingStrategy = routingStrategy; settings.stickySession = stickySession; stickyTtl.toIntOrNull()?.let { settings.stickyTtlSeconds = it }; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 @Composable
