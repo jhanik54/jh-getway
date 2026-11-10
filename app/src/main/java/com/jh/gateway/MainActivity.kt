@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Bundle
+import android.provider.Settings as AndroidSettings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -80,6 +81,8 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.net.Inet4Address
+import java.net.NetworkInterface
 
 class MainActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(
@@ -132,6 +135,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var showChainDialog by remember { mutableStateOf(false) }
     var showMonitoringDialog by remember { mutableStateOf(false) }
     var showBackupDialog by remember { mutableStateOf(false) }
+    var showHelpDialog by remember { mutableStateOf(false) }
     val gatewaySettings = remember { GatewaySettings(context) }
     val tabs = listOf("Home", "Providers", "More")
 
@@ -176,7 +180,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true })
-                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onChain = { showChainDialog = true }, onMonitoring = { showMonitoringDialog = true }, onBackup = { showBackupDialog = true }, onUpdate = { showUpdateDialog = true })
+                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onChain = { showChainDialog = true }, onMonitoring = { showMonitoringDialog = true }, onBackup = { showBackupDialog = true }, onHelp = { showHelpDialog = true }, onUpdate = { showUpdateDialog = true })
             }
         }
         if (showAddDialog) {
@@ -194,6 +198,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         if (showChainDialog) ChainDialog(providerStore, onDismiss = { showChainDialog = false })
         if (showMonitoringDialog) MonitoringDialog(GatewayStats(context), onDismiss = { showMonitoringDialog = false })
         if (showBackupDialog) BackupDialog(providerStore, onDismiss = { showBackupDialog = false })
+        if (showHelpDialog) HelpDialog(gatewaySettings, gatewaySecurity, onDismiss = { showHelpDialog = false })
     }
 }
 
@@ -377,7 +382,7 @@ private fun StatusPill(status: KeyStatus) {
 }
 
 @Composable
-private fun MoreScreen(modifier: Modifier, updateMessage: String, onSettings: () -> Unit, onChain: () -> Unit, onMonitoring: () -> Unit, onBackup: () -> Unit, onUpdate: () -> Unit) {
+private fun MoreScreen(modifier: Modifier, updateMessage: String, onSettings: () -> Unit, onChain: () -> Unit, onMonitoring: () -> Unit, onBackup: () -> Unit, onHelp: () -> Unit, onUpdate: () -> Unit) {
     Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.height(8.dp)); Text("More", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text("Control how JH GetWay works", color = Muted)
         MoreItem(Icons.Default.Storage, "Routing chain", "Set priority and fallback order", onChain)
@@ -385,9 +390,74 @@ private fun MoreScreen(modifier: Modifier, updateMessage: String, onSettings: ()
         MoreItem(Icons.Default.Sync, "Usage", "Requests, status and latency summary", onMonitoring)
         MoreItem(Icons.Default.Settings, "Settings", "Network, appearance and security", onSettings)
         MoreItem(Icons.Default.Security, "Backup & security", "Encrypted export and app lock", onBackup)
+        MoreItem(Icons.Default.Refresh, "Help & setup guide", "Battery, tools and troubleshooting", onHelp)
         MoreItem(Icons.Default.SystemUpdate, "App updates", if (updateMessage.isBlank()) "Check GitHub for a newer APK" else updateMessage, onClick = onUpdate)
-        Spacer(Modifier.weight(1f)); OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("JH GetWay v0.1.0") }
+        Spacer(Modifier.weight(1f)); OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("JH GetWay v${BuildConfig.VERSION_NAME}") }
     }
+}
+
+private fun localIpAddress(): String = runCatching {
+    NetworkInterface.getNetworkInterfaces().toList().asSequence()
+        .flatMap { it.inetAddresses.toList().asSequence() }
+        .filterIsInstance<Inet4Address>().firstOrNull { !it.isLoopbackAddress }?.hostAddress ?: "127.0.0.1"
+}.getOrDefault("127.0.0.1")
+
+@Composable
+private fun HelpDialog(settings: GatewaySettings, security: GatewaySecurity, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val manufacturer = android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase(Locale.US) }
+    var section by remember { mutableIntStateOf(0) }
+    val ip = remember { localIpAddress() }
+    val host = if (settings.wifiMode) ip else "127.0.0.1"
+    val baseUrl = "http://$host:${settings.port}/v1"
+    val key = security.gatewayKey()
+    fun copy(value: String) {
+        context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("JH GetWay setup", value))
+    }
+    val openBatterySettings = {
+        context.startActivity(Intent(AndroidSettings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Help & setup guide") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(section == 0, { section = 0 }, label = { Text("Tools") })
+                    FilterChip(section == 1, { section = 1 }, label = { Text("Battery") })
+                    FilterChip(section == 2, { section = 2 }, label = { Text("Fix problems") })
+                }
+                when (section) {
+                    0 -> {
+                        Text("Gateway address", fontWeight = FontWeight.Bold, color = Navy)
+                        Text(baseUrl, color = Muted, style = MaterialTheme.typography.bodySmall)
+                        Text("Gateway key is copied only when you tap Copy. Keep it private.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = { copy(baseUrl) }, modifier = Modifier.fillMaxWidth()) { Text("Copy API address") }
+                        OutlinedButton(onClick = { copy(key) }, modifier = Modifier.fillMaxWidth()) { Text("Copy gateway key") }
+                        Text("OpenCode / Claude Code / Codex", fontWeight = FontWeight.Bold, color = Navy)
+                        Text("Set the tool base URL to the address above and use the gateway key as its API key. Select model: auto.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        val termux = "export OPENAI_BASE_URL=$baseUrl\nexport OPENAI_API_KEY=$key"
+                        OutlinedButton(onClick = { copy(termux) }, modifier = Modifier.fillMaxWidth()) { Text("Copy Termux setup") }
+                        Text("curl test", fontWeight = FontWeight.Bold, color = Navy)
+                        Text("curl $baseUrl/models -H \"Authorization: Bearer $key\"", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = { copy("curl $baseUrl/models -H \"Authorization: Bearer $key\"") }, modifier = Modifier.fillMaxWidth()) { Text("Copy curl test") }
+                    }
+                    1 -> {
+                        Text("Keep the gateway alive", fontWeight = FontWeight.Bold, color = Navy)
+                        Text("For $manufacturer and especially Poco/Xiaomi: enable Autostart, set Battery saver to No restrictions, and lock JH GetWay in Recent apps. Then enable Start on boot in Settings.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        Button(onClick = openBatterySettings, modifier = Modifier.fillMaxWidth()) { Text("Open battery settings") }
+                        Text("The gateway uses a foreground service, but some phone brands still stop background apps unless these settings are changed.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    else -> {
+                        Text("Common fixes", fontWeight = FontWeight.Bold, color = Navy)
+                        Text("• 401: use the gateway key, not the provider key.\n• Connection refused: start the gateway and check the port.\n• Wi-Fi device cannot connect: enable Wi-Fi open and use the phone IP.\n• All providers unavailable: check provider keys and Routing chain.\n• Port busy: choose another port in Settings, then restart the gateway.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        Text("Privacy: prompts, responses and API keys are not included in logs.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text("Done") } }
+    )
 }
 
 @Composable
