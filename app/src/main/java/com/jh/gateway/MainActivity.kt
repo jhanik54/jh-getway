@@ -201,7 +201,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
             }
         ) { padding ->
             when (tab) {
-                0 -> HomeScreen(Modifier.padding(padding), running, gatewaySecurity.maskedKey(), onCopyKey = {
+                0 -> HomeScreen(Modifier.padding(padding), running, gatewaySecurity.maskedKey(), gatewaySettings.port, gatewaySettings.wifiMode, onCopyKey = {
                     val clipboard = context.getSystemService(ClipboardManager::class.java)
                     clipboard.setPrimaryClip(ClipData.newPlainText("JH GetWay key", gatewaySecurity.gatewayKey()))
                 }, onToggle = {
@@ -296,7 +296,7 @@ private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, St
 }
 
 @Composable
-private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String, onCopyKey: () -> Unit, onToggle: () -> Unit) {
+private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String, port: Int, wifiMode: Boolean, onCopyKey: () -> Unit, onToggle: () -> Unit) {
     LazyColumn(modifier.fillMaxSize().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Spacer(Modifier.height(8.dp))
@@ -304,7 +304,7 @@ private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String,
             Text("Your AI traffic, simplified.", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy)
             Spacer(Modifier.height(4.dp))
         }
-        item { StatusCard(running, onToggle) }
+         item { StatusCard(running, port, wifiMode, onToggle) }
         item { GatewayKeyCard(gatewayKey, onCopyKey) }
         item { MetricRow() }
         item { SectionTitle("Active route", "View chain") }
@@ -328,7 +328,7 @@ private fun GatewayKeyCard(key: String, onCopy: () -> Unit) {
 }
 
 @Composable
-private fun StatusCard(running: Boolean, onToggle: () -> Unit) {
+private fun StatusCard(running: Boolean, port: Int, wifiMode: Boolean, onToggle: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = if (running) Navy else Color(0xFF29344B)), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -340,7 +340,7 @@ private fun StatusCard(running: Boolean, onToggle: () -> Unit) {
             }
             Text(if (running) "Ready to receive requests from your coding tools" else "Start the gateway to connect your coding tools", color = Color.White.copy(alpha = .72f))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (running) "127.0.0.1:8787" else "Local only", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(if (running) "${if (wifiMode) localIpAddress() else "127.0.0.1"}:$port" else "Local only", color = Color.White, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 Button(onClick = onToggle, colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Navy)) {
                     Text(if (running) "Stop" else "Start gateway")

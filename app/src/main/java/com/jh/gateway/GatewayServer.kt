@@ -20,7 +20,7 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
         routing {
             get("/health") {
                 call.respondText(
-                    "{\"status\":\"ok\",\"service\":\"JH GetWay\",\"version\":\"0.1.0\"}",
+                    "{\"status\":\"ok\",\"service\":\"JH GetWay\",\"version\":\"${BuildConfig.VERSION_NAME}\",\"versionCode\":${BuildConfig.VERSION_CODE}}",
                     ContentType.Application.Json
                 )
             }

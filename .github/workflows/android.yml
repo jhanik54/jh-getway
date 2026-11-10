@@ -67,3 +67,4 @@ jobs:
             - App-owned update download with visible progress and later install
             - Help and setup guide for tools, battery settings, and troubleshooting
             - Optional app lock with device PIN/biometrics and screenshot protection
+            - Dynamic version shown in the app, health endpoint, and Home address
