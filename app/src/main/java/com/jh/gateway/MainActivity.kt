@@ -76,6 +76,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -170,9 +171,11 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var showBackupDialog by remember { mutableStateOf(false) }
     var showHelpDialog by remember { mutableStateOf(false) }
     val gatewaySettings = remember { GatewaySettings(context) }
+    var theme by remember { mutableStateOf(gatewaySettings.theme) }
     val tabs = listOf("Home", "Providers", "More")
 
-    MaterialTheme(colorScheme = androidx.compose.material3.lightColorScheme(primary = Blue)) {
+    val darkTheme = when (theme) { "DARK" -> true; "SYSTEM" -> isSystemInDarkTheme(); else -> false }
+    MaterialTheme(colorScheme = if (darkTheme) androidx.compose.material3.darkColorScheme(primary = Color(0xFF9DAAFF)) else androidx.compose.material3.lightColorScheme(primary = Blue)) {
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -226,7 +229,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                 }
             )
         }
-        if (showSettings) SettingsDialog(gatewaySettings, onSecurityChanged = { (context as? MainActivity)?.applySecurityFromUi() }, onDismiss = { showSettings = false })
+        if (showSettings) SettingsDialog(gatewaySettings, onSecurityChanged = { (context as? MainActivity)?.applySecurityFromUi() }, onAppearanceChanged = { theme = gatewaySettings.theme }, onDismiss = { showSettings = false })
         if (showUpdateDialog) UpdateDialog(onDismiss = { showUpdateDialog = false })
         if (showChainDialog) ChainDialog(providerStore, onDismiss = { showChainDialog = false })
         if (showMonitoringDialog) MonitoringDialog(GatewayStats(context), onDismiss = { showMonitoringDialog = false })
@@ -562,11 +565,12 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> Unit, onDismiss: () -> Unit) {
+private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> Unit, onAppearanceChanged: () -> Unit, onDismiss: () -> Unit) {
     var wifi by remember { mutableStateOf(settings.wifiMode) }
     var boot by remember { mutableStateOf(settings.startOnBoot) }
     var appLock by remember { mutableStateOf(settings.appLock) }
     var screenshotBlock by remember { mutableStateOf(settings.screenshotBlock) }
+    var theme by remember { mutableStateOf(settings.theme) }
     var port by remember { mutableStateOf(settings.port.toString()) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Gateway settings") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -575,9 +579,15 @@ private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> U
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Start on boot", fontWeight = FontWeight.SemiBold); Text("Start gateway after phone reboot", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(boot, { boot = it }) }
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("App lock", fontWeight = FontWeight.SemiBold); Text("Require phone PIN or biometrics after 30 seconds", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(appLock, { appLock = it }) }
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Block screenshots", fontWeight = FontWeight.SemiBold); Text("Hide app content from screenshots and recent apps", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(screenshotBlock, { screenshotBlock = it }) }
+            Text("Appearance", fontWeight = FontWeight.SemiBold, color = Navy)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(theme == "LIGHT", { theme = "LIGHT" }, label = { Text("Light") })
+                FilterChip(theme == "DARK", { theme = "DARK" }, label = { Text("Dark") })
+                FilterChip(theme == "SYSTEM", { theme = "SYSTEM" }, label = { Text("System") })
+            }
             OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text("Port") }, singleLine = true)
         }
-    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 @Composable

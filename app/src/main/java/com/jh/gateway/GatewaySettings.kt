@@ -10,4 +10,5 @@ class GatewaySettings(context: Context) {
     var appLock: Boolean get() = prefs.getBoolean("app_lock", false); set(value) { prefs.edit().putBoolean("app_lock", value).apply() }
     var screenshotBlock: Boolean get() = prefs.getBoolean("screenshot_block", false); set(value) { prefs.edit().putBoolean("screenshot_block", value).apply() }
     var lastUnlock: Long get() = prefs.getLong("last_unlock", 0L); set(value) { prefs.edit().putLong("last_unlock", value).apply() }
+    var theme: String get() = prefs.getString("theme", "LIGHT") ?: "LIGHT"; set(value) { prefs.edit().putString("theme", value).apply() }
 }
