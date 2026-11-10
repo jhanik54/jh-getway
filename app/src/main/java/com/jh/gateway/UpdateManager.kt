@@ -3,6 +3,8 @@ package com.jh.gateway
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.core.content.FileProvider
 import org.json.JSONObject
 import java.io.File
@@ -22,7 +24,10 @@ class UpdateManager(private val context: Context) {
                 val connection = URL(latestReleaseApi).openConnection() as HttpURLConnection
                 connection.connectTimeout = 10_000
                 connection.readTimeout = 10_000
+                connection.setRequestProperty("User-Agent", "JH-GetWay/${BuildConfig.VERSION_NAME}")
                 connection.setRequestProperty("Accept", "application/vnd.github+json")
+                val status = connection.responseCode
+                check(status in 200..299) { "GitHub update check failed (HTTP $status)" }
                 val json = connection.inputStream.bufferedReader().use { it.readText() }
                 connection.disconnect()
                 val release = JSONObject(json)
@@ -42,11 +47,22 @@ class UpdateManager(private val context: Context) {
             val result = runCatching {
                 val folder = File(context.cacheDir, "updates").apply { mkdirs() }
                 val apk = File(folder, "jh-getway-${update.versionName}.apk")
-                (URL(update.apkUrl).openConnection() as HttpURLConnection).apply {
+                val connection = (URL(update.apkUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 15_000
                     readTimeout = 120_000
-                    inputStream.use { input -> apk.outputStream().use { output -> input.copyTo(output) } }
-                    disconnect()
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "JH-GetWay/${BuildConfig.VERSION_NAME}")
+                }
+                check(connection.responseCode in 200..299) { "APK download failed (HTTP ${connection.responseCode})" }
+                val partial = File(folder, "${apk.name}.part")
+                connection.inputStream.use { input -> partial.outputStream().use { output -> input.copyTo(output) } }
+                connection.disconnect()
+                check(partial.length() > 1_000_000) { "Downloaded APK is incomplete" }
+                partial.renameTo(apk)
+                check(apk.exists()) { "Could not prepare APK installer file" }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+                    context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    error("Allow JH GetWay to install updates, then tap Check for updates again")
                 }
                 val uri = FileProvider.getUriForFile(context, "com.jh.gateway.fileprovider", apk)
                 context.startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/vnd.android.package-archive"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION) })
