@@ -34,7 +34,15 @@ object ProtocolAdapter {
         return "data: $data\n\n"
     }
 
-    fun toProvider(body: String, provider: StoredProvider): String = if (provider.protocol == ProviderProtocol.ANTHROPIC) toAnthropic(body, provider.model) else body
+    fun toProvider(body: String, provider: StoredProvider): String {
+        val mapped = runCatching {
+            val input = JSONObject(body)
+            val requested = input.optString("model", "auto")
+            if (requested == "auto" || requested in provider.aliases) input.put("model", provider.model)
+            input.toString()
+        }.getOrDefault(body)
+        return if (provider.protocol == ProviderProtocol.ANTHROPIC) toAnthropic(mapped, provider.model) else mapped
+    }
     fun fromProvider(body: String, provider: StoredProvider): String = if (provider.protocol == ProviderProtocol.ANTHROPIC) fromAnthropic(body) else body
 
     fun toOpenAi(body: String, protocol: ClientProtocol): String {

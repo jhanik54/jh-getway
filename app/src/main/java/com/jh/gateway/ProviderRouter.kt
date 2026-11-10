@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 data class ForwardResult(val status: Int, val body: String, val provider: String? = null, val retryAfterMillis: Long? = null)
 
-class ProviderRouter(private val store: ProviderStore, private val chainStore: ChainStore) {
+class ProviderRouter(private val store: ProviderStore, private val chainStore: ChainStore, private val settings: GatewaySettings) {
     private val roundRobin = ConcurrentHashMap<String, AtomicInteger>()
     private val sticky = ConcurrentHashMap<String, String>()
     fun forward(body: String): ForwardResult {
@@ -67,7 +67,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
 
     private fun eligible(requestedModel: String, body: String): List<StoredProvider> {
         val providers = store.list().filter { provider ->
-        provider.enabled && !provider.isCoolingDown && (requestedModel.isBlank() || requestedModel == "auto" || provider.model == "auto" || provider.model == requestedModel)
+        provider.enabled && !provider.isCoolingDown && (requestedModel.isBlank() || requestedModel == "auto" || provider.model == "auto" || provider.model == requestedModel || requestedModel in provider.aliases)
         }
         val chain = chainStore.load(store.list()).filter { it.enabled }.withIndex().associate { it.value.id to (it.index to it.value.tier.ordinal) }
         val sorted = providers.sortedWith(compareBy({ chain[it.id]?.second ?: 0 }, { chain[it.id]?.first ?: Int.MAX_VALUE }, { it.priority }))
@@ -100,8 +100,8 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
     private fun open(provider: StoredProvider, key: String, body: String): HttpURLConnection {
         val connection = (URL(endpoint(provider.baseUrl, provider.protocol)).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 15_000
-            readTimeout = 120_000
+            connectTimeout = settings.connectTimeoutMs
+            readTimeout = settings.readTimeoutMs
             doOutput = true
             if (provider.protocol == ProviderProtocol.ANTHROPIC) { setRequestProperty("x-api-key", key); setRequestProperty("anthropic-version", "2023-06-01") } else setRequestProperty("Authorization", "Bearer $key")
             setRequestProperty("Content-Type", "application/json")

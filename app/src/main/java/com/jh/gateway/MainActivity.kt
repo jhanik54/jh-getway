@@ -228,14 +228,14 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         if (showAddDialog) {
             AddProviderDialog(
                 onDismiss = { showAddDialog = false },
-                onSave = { name, url, model, key, protocol ->
-                    runCatching { providerStore.add(name, url, model, key, protocol) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore) }; showAddDialog = false }.onFailure { providerMessage = it.message ?: "Could not add provider" }
+                onSave = { name, url, model, key, protocol, aliases ->
+                    runCatching { providerStore.add(name, url, model, key, protocol, aliases) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore) }; showAddDialog = false }.onFailure { providerMessage = it.message ?: "Could not add provider" }
                 }
             )
         }
         editingProvider?.let { provider ->
-            AddProviderDialog(initial = provider, initialKey = providerStore.apiKey(provider).orEmpty(), onDismiss = { editingProvider = null }, onSave = { name, url, model, key, protocol ->
-                runCatching { providerStore.update(provider.id, name, url, model, key, protocol) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore) }; editingProvider = null; providerMessage = "Provider updated" }.onFailure { providerMessage = it.message ?: "Update failed" }
+            AddProviderDialog(initial = provider, initialKey = providerStore.apiKey(provider).orEmpty(), onDismiss = { editingProvider = null }, onSave = { name, url, model, key, protocol, aliases ->
+                runCatching { providerStore.update(provider.id, name, url, model, key, protocol, aliases) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore) }; editingProvider = null; providerMessage = "Provider updated" }.onFailure { providerMessage = it.message ?: "Update failed" }
             })
         }
         if (showSettings) SettingsDialog(gatewaySettings, onSecurityChanged = { (context as? MainActivity)?.applySecurityFromUi() }, onAppearanceChanged = { theme = gatewaySettings.theme }, onDismiss = { showSettings = false })
@@ -259,12 +259,13 @@ private fun StoredProvider.toProviderKey(store: ProviderStore) = ProviderKey(
 )
 
 @Composable
-private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: String = "", onDismiss: () -> Unit, onSave: (String, String, String, String, ProviderProtocol) -> Unit) {
+private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: String = "", onDismiss: () -> Unit, onSave: (String, String, String, String, ProviderProtocol, List<String>) -> Unit) {
     val context = LocalContext.current
     var name by remember(initial?.id) { mutableStateOf(initial?.name ?: "") }
     var url by remember(initial?.id) { mutableStateOf(initial?.baseUrl ?: "https://api.openai.com") }
     var model by remember(initial?.id) { mutableStateOf(initial?.model ?: "auto") }
     var key by remember(initial?.id) { mutableStateOf(initialKey) }
+    var aliases by remember(initial?.id) { mutableStateOf(initial?.aliases?.joinToString(", ") ?: "") }
     var showPresets by remember { mutableStateOf(false) }
     var protocol by remember { mutableStateOf(ProviderProtocol.OPENAI) }
     var models by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -293,8 +294,9 @@ private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: Strin
                 Column(Modifier.height(120.dp)) { models.take(12).forEach { item -> FilterChip(selected = model == item, onClick = { model = item }, label = { Text(item, maxLines = 1) }) } }
             }
             OutlinedTextField(key, { key = it }, label = { Text("API key") }, singleLine = true)
+            OutlinedTextField(aliases, { aliases = it }, label = { Text("Model aliases (comma separated)") }, singleLine = true)
         } },
-        confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key, protocol) }) { Text("Save securely") } },
+        confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key, protocol, aliases.split(',').map(String::trim).filter(String::isNotBlank)) }) { Text("Save securely") } },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
     )
     if (showPresets) {

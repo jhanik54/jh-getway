@@ -16,7 +16,7 @@ import org.json.JSONObject
 
 /** Local-only HTTP surface. Provider forwarding is the next milestone. */
 class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val stats: GatewayStats, settings: GatewaySettings, chainStore: ChainStore) {
-    private val router = ProviderRouter(store, chainStore)
+    private val router = ProviderRouter(store, chainStore, settings)
     private val server = embeddedServer(CIO, host = if (settings.wifiMode) "0.0.0.0" else "127.0.0.1", port = settings.port) {
         routing {
             get("/health") {
@@ -27,7 +27,7 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
             }
             get("/v1/models") {
                 if (!call.authorized()) return@get
-                val models = store.list().filter { it.enabled }.joinToString(",") { "{\"id\":\"${escape(it.model)}\",\"object\":\"model\",\"owned_by\":\"${escape(it.name)}\"}" }
+                val models = store.list().filter { it.enabled }.flatMap { provider -> (listOf(provider.model) + provider.aliases).distinct().map { model -> "{\"id\":\"${escape(model)}\",\"object\":\"model\",\"owned_by\":\"${escape(provider.name)}\"}" } }.distinct().joinToString(",")
                 call.respondText("{\"object\":\"list\",\"data\":[$models]}", ContentType.Application.Json)
             }
             get("/v1/gateway/logs") {
