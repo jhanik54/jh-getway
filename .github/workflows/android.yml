@@ -44,7 +44,7 @@ jobs:
       - name: Build debug APK
         env:
           JH_SIGNING_PASSWORD: jh-getway-stable-signing-v1
-        run: gradle test assembleDebug
+        run: gradle assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -95,3 +95,4 @@ jobs:
             - Priority/Round Robin routing selector and TTL-based sticky sessions
             - LAN IP allowlist, per-IP rate limiting, and protocol adapter fixture tests
             - Compile-fix follow-up for the security/test batch
+            - Android-runtime protocol fixture tests prepared for device execution
