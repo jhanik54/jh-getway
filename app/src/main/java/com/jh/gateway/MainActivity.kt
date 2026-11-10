@@ -653,9 +653,10 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                     manager.download(update!!, { value -> activity?.runOnUiThread { progress = value } }) { result -> activity?.runOnUiThread { downloading = false; result.onSuccess { downloadedFile = it; progress = 100; status = "Download complete. Tap Install update." }.onFailure { status = "Download failed: ${it.message}" } } }
                 }) { Text("Download update") }
                 else -> Button(onClick = {
+                    update = null
                     status = "Checking GitHub releases…"
                     manager.check { result -> activity?.runOnUiThread { result.onSuccess { found -> update = found; status = if (found == null) "You are up to date." else "New update found." }.onFailure { status = "Check failed: ${it.message}" } } }
-                }) { Text("Check now") }
+                }) { Text("Check for updates") }
             }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Close") } }

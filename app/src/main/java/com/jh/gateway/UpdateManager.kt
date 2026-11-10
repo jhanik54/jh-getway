@@ -61,9 +61,16 @@ class UpdateManager(private val context: Context) {
     }
 
     /** Returns a completed APK kept in app-private storage after the update dialog was closed. */
-    fun existingApk(): File? = File(context.filesDir, "updates").listFiles()
-        ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) && it.length() > 1_000_000 }
-        ?.maxByOrNull { it.lastModified() }
+    fun existingApk(): File? {
+        val folder = File(context.filesDir, "updates")
+        return folder.listFiles()
+            ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) && it.length() > 1_000_000 }
+            ?.filter { file ->
+                val version = Regex("jh-getway-(\\d+)(?:\\.\\d+){0,2}\\.apk").find(file.name)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                if (version == null || version <= BuildConfig.VERSION_CODE) { file.delete(); false } else true
+            }
+            ?.maxByOrNull { it.lastModified() }
+    }
 
     fun openReleasePage(update: AvailableUpdate) { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.releaseUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 

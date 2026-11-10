@@ -70,3 +70,4 @@ jobs:
             - Dynamic version shown in the app, health endpoint, and Home address
             - Official JH GetWay launcher logo supplied by the owner
             - Persistent downloaded update recovery after closing the update screen
+            - Stale APK cleanup and reliable forced update check
