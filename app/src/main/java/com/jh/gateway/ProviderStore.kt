@@ -44,6 +44,7 @@ class ProviderStore(context: Context) {
 
     @Synchronized
     fun add(name: String, baseUrl: String, model: String, apiKey: String) {
+        require(list().none { apiKey(it) == apiKey }) { "This API key is already configured" }
         val id = "provider_${System.currentTimeMillis()}"
         val provider = StoredProvider(id, name.trim(), baseUrl.trim().trimEnd('/'), model.trim().ifBlank { "auto" }, list().size + 1)
         save(list() + provider)
@@ -60,6 +61,24 @@ class ProviderStore(context: Context) {
     @Synchronized
     fun disable(provider: StoredProvider) {
         save(list().map { if (it.id == provider.id) it.copy(enabled = false) else it })
+    }
+
+    @Synchronized
+    fun exportPayload(): String {
+        val array = JSONArray()
+        list().forEach { provider -> array.put(JSONObject().apply { put("name", provider.name); put("baseUrl", provider.baseUrl); put("model", provider.model); put("priority", provider.priority); put("apiKey", apiKey(provider).orEmpty()) }) }
+        return array.toString()
+    }
+
+    @Synchronized
+    fun importPayload(payload: String, replace: Boolean = false) {
+        val incoming = JSONArray(payload)
+        if (replace) prefs.edit().remove(PROVIDERS).apply()
+        for (index in 0 until incoming.length()) {
+            val item = incoming.getJSONObject(index)
+            val key = item.optString("apiKey")
+            if (key.isNotBlank() && list().none { apiKey(it) == key }) add(item.optString("name", "Imported provider"), item.getString("baseUrl"), item.optString("model", "auto"), key)
+        }
     }
 
     private fun save(providers: List<StoredProvider>) {
