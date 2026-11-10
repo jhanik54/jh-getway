@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -71,6 +72,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -171,6 +173,8 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var showBackupDialog by remember { mutableStateOf(false) }
     var showHelpDialog by remember { mutableStateOf(false) }
     val gatewaySettings = remember { GatewaySettings(context) }
+    val gatewayState = remember { GatewayStateStore(context) }
+    LaunchedEffect(Unit) { running = gatewayState.state == GatewayRunState.RUNNING }
     var theme by remember { mutableStateOf(gatewaySettings.theme) }
     val tabs = listOf("Home", "Providers", "More")
 
@@ -215,7 +219,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     }
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 })
-                1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true })
+                1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true }, onToggle = { key, enabled -> providerStore.setEnabled(key.id, enabled); keys = providerStore.list().map { it.toProviderKey(providerStore) } }, onDelete = { key -> providerStore.remove(key.id); keys = providerStore.list().map { it.toProviderKey(providerStore) } })
                 else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onChain = { showChainDialog = true }, onMonitoring = { showMonitoringDialog = true }, onBackup = { showBackupDialog = true }, onHelp = { showHelpDialog = true }, onUpdate = { showUpdateDialog = true })
             }
         }
@@ -246,7 +250,7 @@ private fun MainActivity.applySecurityFromUi() {
 private fun StoredProvider.toProviderKey(store: ProviderStore) = ProviderKey(
     name, baseUrl.removePrefix("https://").removePrefix("http://"), model,
     when { !enabled -> KeyStatus.DISABLED; isCoolingDown -> KeyStatus.COOLDOWN; else -> KeyStatus.ACTIVE },
-    priority, store.apiKey(this)?.let { "${it.take(4)}••••••${it.takeLast(4)}" } ?: "••••••••"
+    priority, store.apiKey(this)?.let { "${it.take(4)}••••••${it.takeLast(4)}" } ?: "••••••••", id
 )
 
 @Composable
@@ -395,22 +399,22 @@ private fun RouteCard() {
 }
 
 @Composable
-private fun ProvidersScreen(modifier: Modifier, keys: List<ProviderKey>, onAdd: () -> Unit) {
+private fun ProvidersScreen(modifier: Modifier, keys: List<ProviderKey>, onAdd: () -> Unit, onToggle: (ProviderKey, Boolean) -> Unit, onDelete: (ProviderKey) -> Unit) {
     Column(modifier.fillMaxSize().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Providers", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text("Manage your AI keys and models", color = Muted) }; Button(onClick = onAdd) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text("Add key") } }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(true, {}, label = { Text("All  3") }); FilterChip(false, {}, label = { Text("Active  2") }); FilterChip(false, {}, label = { Text("Cooldown  1") }) }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(keys) { ProviderCard(it) } }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(keys) { ProviderCard(it, onToggle, onDelete) } }
     }
 }
 
 @Composable
-private fun ProviderCard(key: ProviderKey) {
+private fun ProviderCard(key: ProviderKey, onToggle: (ProviderKey, Boolean) -> Unit, onDelete: (ProviderKey) -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE6EAF0))) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(38.dp), shape = RoundedCornerShape(10.dp), color = Color(0xFFF0F2FF)) { Icon(Icons.Default.Key, null, tint = Blue, modifier = Modifier.padding(9.dp)) }; Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text(key.name, fontWeight = FontWeight.SemiBold, color = Navy); Text(key.provider, color = Muted, style = MaterialTheme.typography.bodySmall) }; StatusPill(key.status) }
             Row(verticalAlignment = Alignment.CenterVertically) { Text(key.model, color = Navy, fontWeight = FontWeight.Medium); Spacer(Modifier.weight(1f)); Text("Priority ${key.priority}", color = Muted, style = MaterialTheme.typography.labelSmall) }
-            Row(verticalAlignment = Alignment.CenterVertically) { Text(key.maskedKey, color = Muted, style = MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); IconButton(onClick = {}) { Icon(Icons.Default.ContentCopy, "Copy", tint = Muted) } }
+            Row(verticalAlignment = Alignment.CenterVertically) { Text(key.maskedKey, color = Muted, style = MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Switch(key.status != KeyStatus.DISABLED, { onToggle(key, it) }); IconButton(onClick = { onDelete(key) }) { Icon(Icons.Default.Delete, "Delete", tint = Color(0xFFD64545)) } }
         }
     }
 }

@@ -18,6 +18,7 @@ class GatewayService : Service() {
     private lateinit var gatewayStats: GatewayStats
     private lateinit var gatewaySettings: GatewaySettings
     private lateinit var chainStore: ChainStore
+    private lateinit var stateStore: GatewayStateStore
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
@@ -28,6 +29,7 @@ class GatewayService : Service() {
         gatewayStats = GatewayStats(this)
         gatewaySettings = GatewaySettings(this)
         chainStore = ChainStore(this)
+        stateStore = GatewayStateStore(this)
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Gateway", NotificationManager.IMPORTANCE_LOW)
@@ -40,19 +42,33 @@ class GatewayService : Service() {
             releaseLocks()
             gatewayServer?.stop()
             gatewayServer = null
+            stateStore.state = GatewayRunState.STOPPED
+            stateStore.error = ""
             stopSelf()
             return START_NOT_STICKY
         }
-        startForeground(NOTIFICATION_ID, notification())
-        acquireLocks()
-        if (gatewayServer == null) gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats, gatewaySettings, chainStore).also { it.start() }
+        startForeground(NOTIFICATION_ID, notification("Starting gateway…"))
+        stateStore.state = GatewayRunState.STARTING
+        try {
+            if (gatewayServer == null) gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats, gatewaySettings, chainStore).also { it.start() }
+            acquireLocks()
+            stateStore.state = GatewayRunState.RUNNING
+            stateStore.error = ""
+            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification("Gateway running • ${gatewaySettings.port}"))
+        } catch (error: Throwable) {
+            releaseLocks()
+            gatewayServer = null
+            stateStore.state = GatewayRunState.ERROR
+            stateStore.error = error.message ?: "Could not start gateway"
+            stopSelf()
+        }
         return START_STICKY
     }
 
-    private fun notification(): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun notification(status: String): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.stat_sys_upload)
         .setContentTitle("JH GetWay চলছে")
-        .setContentText("Local gateway প্রস্তুত হচ্ছে")
+        .setContentText(status)
         .setOngoing(true)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
         .addAction(NotificationCompat.Action(0, "Stop", PendingIntent.getService(this, 2, Intent(this, GatewayService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)))
@@ -71,6 +87,7 @@ class GatewayService : Service() {
         releaseLocks()
         gatewayServer?.stop()
         gatewayServer = null
+        if (::stateStore.isInitialized && stateStore.state != GatewayRunState.ERROR) stateStore.state = GatewayRunState.STOPPED
         super.onDestroy()
     }
 

@@ -13,6 +13,8 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import java.util.UUID
+import java.net.URI
 
 enum class ProviderProtocol { OPENAI, ANTHROPIC }
 
@@ -47,11 +49,17 @@ class ProviderStore(context: Context) {
 
     @Synchronized
     fun add(name: String, baseUrl: String, model: String, apiKey: String, protocol: ProviderProtocol = ProviderProtocol.OPENAI) {
-        require(list().none { apiKey(it) == apiKey }) { "This API key is already configured" }
-        val id = "provider_${System.currentTimeMillis()}"
-        val provider = StoredProvider(id, name.trim(), baseUrl.trim().trimEnd('/'), model.trim().ifBlank { "auto" }, list().size + 1, protocol)
+        require(name.trim().isNotBlank()) { "Provider name is required" }
+        val normalizedUrl = baseUrl.trim().trimEnd('/')
+        val parsedUrl = runCatching { URI(normalizedUrl) }.getOrNull()
+        require(parsedUrl != null && parsedUrl.scheme in setOf("http", "https") && !parsedUrl.host.isNullOrBlank()) { "Base URL must be a valid http(s) URL" }
+        require(apiKey.trim().isNotBlank()) { "API key is required" }
+        val normalizedKey = apiKey.trim()
+        require(list().none { apiKey(it) == normalizedKey }) { "This API key is already configured" }
+        val id = "provider_${UUID.randomUUID()}"
+        val provider = StoredProvider(id, name.trim(), normalizedUrl, model.trim().ifBlank { "auto" }, list().size + 1, protocol)
         save(list() + provider)
-        prefs.edit().putString(keyName(id), encrypt(apiKey)).apply()
+        prefs.edit().putString(keyName(id), encrypt(normalizedKey)).apply()
     }
 
     fun apiKey(provider: StoredProvider): String? = prefs.getString(keyName(provider.id), null)?.let(::decrypt)
@@ -64,6 +72,15 @@ class ProviderStore(context: Context) {
     @Synchronized
     fun disable(provider: StoredProvider) {
         save(list().map { if (it.id == provider.id) it.copy(enabled = false) else it })
+    }
+
+    @Synchronized
+    fun setEnabled(id: String, enabled: Boolean) { save(list().map { if (it.id == id) it.copy(enabled = enabled) else it }) }
+
+    @Synchronized
+    fun remove(id: String) {
+        save(list().filterNot { it.id == id })
+        prefs.edit().remove(keyName(id)).apply()
     }
 
     @Synchronized

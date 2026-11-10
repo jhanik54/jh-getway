@@ -6,7 +6,8 @@ data class ProviderKey(
     val model: String,
     val status: KeyStatus,
     val priority: Int,
-    val maskedKey: String
+    val maskedKey: String,
+    val id: String = ""
 )
 
 enum class KeyStatus { ACTIVE, COOLDOWN, DISABLED }

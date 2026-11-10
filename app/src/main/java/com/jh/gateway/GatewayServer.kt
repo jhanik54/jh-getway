@@ -12,6 +12,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.http.HttpStatusCode
+import org.json.JSONObject
 
 /** Local-only HTTP surface. Provider forwarding is the next milestone. */
 class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val stats: GatewayStats, settings: GatewaySettings, chainStore: ChainStore) {
@@ -36,7 +37,7 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
             }
             post("/v1/chat/completions") {
                 if (!call.authorized()) return@post
-                val body = call.receiveText()
+                val body = call.receiveValidatedBody() ?: return@post
                 if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
                     call.respondOutputStream(ContentType.Text.EventStream) { router.stream(body, this, ClientProtocol.OPENAI) }
                 } else {
@@ -49,13 +50,13 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
             }
             post("/v1/messages") {
                 if (!call.authorized()) return@post
-                val body = call.receiveText()
+                val body = call.receiveValidatedBody() ?: return@post
                 if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) call.respondOutputStream(ContentType.Text.EventStream) { router.stream(ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC), this, ClientProtocol.ANTHROPIC) }
                 else { val result = router.forward(ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC)); stats.recordUsage(result.body); call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.ANTHROPIC), ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
             }
             post("/v1/responses") {
                 if (!call.authorized()) return@post
-                val body = call.receiveText()
+                val body = call.receiveValidatedBody() ?: return@post
                 if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) call.respondOutputStream(ContentType.Text.EventStream) { router.stream(ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES), this, ClientProtocol.RESPONSES) }
                 else { val result = router.forward(ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES)); stats.recordUsage(result.body); call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.RESPONSES), ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
             }
@@ -70,8 +71,23 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
         return false
     }
 
+    private suspend fun io.ktor.server.application.ApplicationCall.receiveValidatedBody(): String? {
+        if ((request.headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: 0L) > MAX_BODY_BYTES) {
+            respondText("{\"error\":{\"message\":\"Request body is too large\",\"type\":\"invalid_request_error\"}}", ContentType.Application.Json, HttpStatusCode.PayloadTooLarge)
+            return null
+        }
+        val body = runCatching { receiveText() }.getOrNull()
+        if (body.isNullOrBlank() || runCatching { JSONObject(body) }.isFailure) {
+            respondText("{\"error\":{\"message\":\"Request body must be valid JSON\",\"type\":\"invalid_request_error\"}}", ContentType.Application.Json, HttpStatusCode.BadRequest)
+            return null
+        }
+        return body
+    }
+
     private fun escape(value: String) = value.replace("\\", "\\\\").replace("\"", "\\\"")
 
     fun start() = server.start(wait = false)
     fun stop() = server.stop(500, 1_000)
+
+    companion object { private const val MAX_BODY_BYTES = 4L * 1024L * 1024L }
 }
