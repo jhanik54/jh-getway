@@ -13,11 +13,14 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import java.util.concurrent.ConcurrentHashMap
 
 /** Gateway credential and lightweight IP abuse protection. API keys never leave this class in logs. */
 class GatewaySecurity(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("gateway_security", Context.MODE_PRIVATE)
     private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    private val requestWindows = ConcurrentHashMap<String, RateWindow>()
+    private data class RateWindow(var startedAt: Long, var count: Int)
 
     init {
         if (!prefs.contains(GATEWAY_KEY)) prefs.edit().putString(GATEWAY_KEY, encrypt(createGatewayKey())).apply()
@@ -36,6 +39,21 @@ class GatewaySecurity(context: Context) {
         val valid = supplied.isNotEmpty() && MessageDigest.isEqual(supplied.toByteArray(), gatewayKey().toByteArray())
         if (!valid) recordFailure(remoteIp)
         return valid
+    }
+
+    fun isIpAllowed(remoteIp: String, allowlist: String): Boolean {
+        val entries = allowlist.split(',').map(String::trim).filter(String::isNotBlank)
+        return entries.isEmpty() || remoteIp in entries || remoteIp == "127.0.0.1" || remoteIp == "0:0:0:0:0:0:0:1"
+    }
+
+    @Synchronized
+    fun allowRequest(remoteIp: String, maxPerMinute: Int = 120): Boolean {
+        val now = System.currentTimeMillis()
+        val current = requestWindows[remoteIp]
+        if (current == null || now - current.startedAt >= 60_000L) { requestWindows[remoteIp] = RateWindow(now, 1); return true }
+        if (current.count >= maxPerMinute) return false
+        current.count++
+        return true
     }
 
     @Synchronized

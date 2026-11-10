@@ -66,7 +66,16 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
     private suspend fun io.ktor.server.application.ApplicationCall.authorized(): Boolean {
         val bearer = request.headers[HttpHeaders.Authorization]
         val apiKey = request.headers["x-api-key"]
-        if (security.isAuthorized(bearer ?: apiKey, request.local.remoteHost)) return true
+        val remoteIp = request.local.remoteHost
+        if (!security.isIpAllowed(remoteIp, settings.ipAllowlist)) {
+            respondText("{\"error\":{\"message\":\"Client IP is not allowlisted\",\"type\":\"permission_error\"}}", ContentType.Application.Json, HttpStatusCode.Forbidden)
+            return false
+        }
+        if (!security.allowRequest(remoteIp)) {
+            respondText("{\"error\":{\"message\":\"Too many requests from this IP\",\"type\":\"rate_limit_error\"}}", ContentType.Application.Json, HttpStatusCode.TooManyRequests)
+            return false
+        }
+        if (security.isAuthorized(bearer ?: apiKey, remoteIp)) return true
         respondText("{\"error\":{\"message\":\"Invalid or missing gateway key\",\"type\":\"authentication_error\"}}", ContentType.Application.Json, HttpStatusCode.Unauthorized)
         return false
     }

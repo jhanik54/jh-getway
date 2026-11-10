@@ -44,7 +44,7 @@ jobs:
       - name: Build debug APK
         env:
           JH_SIGNING_PASSWORD: jh-getway-stable-signing-v1
-        run: gradle assembleDebug
+        run: gradle test assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -93,3 +93,4 @@ jobs:
             - Provider edit, test, enable/disable, and secure delete cleanup
             - Model aliases and provider-specific upstream model mapping
             - Priority/Round Robin routing selector and TTL-based sticky sessions
+            - LAN IP allowlist, per-IP rate limiting, and protocol adapter fixture tests
