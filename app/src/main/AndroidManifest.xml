@@ -11,6 +11,8 @@
     <application
         android:allowBackup="false"
         android:label="JH GetWay"
+        android:icon="@drawable/jh_getway_logo"
+        android:roundIcon="@drawable/jh_getway_logo"
         android:supportsRtl="true"
         android:theme="@style/Theme.JHGetWay">
         <activity
