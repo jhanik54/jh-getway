@@ -7,7 +7,7 @@ import org.json.JSONObject
 
 data class ForwardResult(val status: Int, val body: String, val provider: String? = null)
 
-class ProviderRouter(private val store: ProviderStore) {
+class ProviderRouter(private val store: ProviderStore, private val chainStore: ChainStore) {
     fun forward(body: String): ForwardResult {
         val requestedModel = runCatching { JSONObject(body).optString("model", "auto") }.getOrDefault("auto")
         val candidates = eligible(requestedModel)
@@ -47,8 +47,12 @@ class ProviderRouter(private val store: ProviderStore) {
         return ForwardResult(502, "{\"error\":{\"message\":\"All providers failed before streaming\",\"type\":\"provider_error\"}}")
     }
 
-    private fun eligible(requestedModel: String): List<StoredProvider> = store.list().filter { provider ->
+    private fun eligible(requestedModel: String): List<StoredProvider> {
+        val providers = store.list().filter { provider ->
         provider.enabled && !provider.isCoolingDown && (requestedModel.isBlank() || requestedModel == "auto" || provider.model == "auto" || provider.model == requestedModel)
+        }
+        val chain = chainStore.load(store.list()).withIndex().associate { it.value.id to (it.index to it.value.tier.ordinal) }
+        return providers.sortedWith(compareBy({ chain[it.id]?.second ?: 0 }, { chain[it.id]?.first ?: Int.MAX_VALUE }, { it.priority }))
     }
 
     private fun request(provider: StoredProvider, key: String, body: String): ForwardResult {

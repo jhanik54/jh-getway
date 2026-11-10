@@ -123,6 +123,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var updateMessage by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+    var showChainDialog by remember { mutableStateOf(false) }
     val gatewaySettings = remember { GatewaySettings(context) }
     val tabs = listOf("Home", "Providers", "More")
 
@@ -167,7 +168,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true })
-                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onUpdate = { showUpdateDialog = true })
+                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onChain = { showChainDialog = true }, onUpdate = { showUpdateDialog = true })
             }
         }
         if (showAddDialog) {
@@ -182,6 +183,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         }
         if (showSettings) SettingsDialog(gatewaySettings, onDismiss = { showSettings = false })
         if (showUpdateDialog) UpdateDialog(onDismiss = { showUpdateDialog = false })
+        if (showChainDialog) ChainDialog(providerStore, onDismiss = { showChainDialog = false })
     }
 }
 
@@ -365,10 +367,10 @@ private fun StatusPill(status: KeyStatus) {
 }
 
 @Composable
-private fun MoreScreen(modifier: Modifier, updateMessage: String, onSettings: () -> Unit, onUpdate: () -> Unit) {
+private fun MoreScreen(modifier: Modifier, updateMessage: String, onSettings: () -> Unit, onChain: () -> Unit, onUpdate: () -> Unit) {
     Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.height(8.dp)); Text("More", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text("Control how JH GetWay works", color = Muted)
-        MoreItem(Icons.Default.Storage, "Routing chain", "Set priority and fallback order")
+        MoreItem(Icons.Default.Storage, "Routing chain", "Set priority and fallback order", onChain)
         MoreItem(Icons.Default.Refresh, "Request logs", "Review provider switches and errors")
         MoreItem(Icons.Default.Settings, "Settings", "Network, appearance and security", onSettings)
         MoreItem(Icons.Default.Security, "Backup & security", "Encrypted export and app lock")
@@ -390,6 +392,40 @@ private fun SettingsDialog(settings: GatewaySettings, onDismiss: () -> Unit) {
             OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text("Port") }, singleLine = true)
         }
     }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; port.toIntOrNull()?.let { settings.port = it }; onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
+}
+
+@Composable
+private fun ChainDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val chainStore = remember { ChainStore(context) }
+    var entries by remember { mutableStateOf(chainStore.load(providerStore.list())) }
+    fun persist(next: List<ChainEntry>) { entries = next; chainStore.save(next) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Routing chain") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Requests using auto start from Best, then Good, then Basic.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                ChainTier.values().forEach { tier ->
+                    Text(tier.name, fontWeight = FontWeight.Bold, color = Navy)
+                    val tierEntries = entries.filter { it.tier == tier }
+                    if (tierEntries.isEmpty()) Text("No models in this tier", color = Muted, style = MaterialTheme.typography.labelSmall)
+                    tierEntries.forEach { entry ->
+                        val index = entries.indexOf(entry)
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F6FA))) {
+                            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) { Text(entry.provider, fontWeight = FontWeight.SemiBold, color = Navy); Text(entry.model, color = Muted, style = MaterialTheme.typography.labelSmall) }
+                                IconButton(onClick = { if (index > 0) { val next = entries.toMutableList(); val previous = next.removeAt(index - 1); next.add(index, previous); persist(next) } }) { Text("↑", color = Blue) }
+                                IconButton(onClick = { if (index < entries.lastIndex) { val next = entries.toMutableList(); val following = next.removeAt(index + 1); next.add(index, following); persist(next) } }) { Text("↓", color = Blue) }
+                                TextButton(onClick = { val nextTier = when (entry.tier) { ChainTier.BEST -> ChainTier.GOOD; ChainTier.GOOD -> ChainTier.BASIC; ChainTier.BASIC -> ChainTier.BEST }; persist(entries.map { if (it.id == entry.id) it.copy(tier = nextTier) else it }) }) { Text("Tier") }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text("Done") } }
+    )
 }
 
 @Composable

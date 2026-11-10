@@ -14,8 +14,8 @@ import io.ktor.server.routing.routing
 import io.ktor.http.HttpStatusCode
 
 /** Local-only HTTP surface. Provider forwarding is the next milestone. */
-class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val stats: GatewayStats, settings: GatewaySettings) {
-    private val router = ProviderRouter(store)
+class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val stats: GatewayStats, settings: GatewaySettings, chainStore: ChainStore) {
+    private val router = ProviderRouter(store, chainStore)
     private val server = embeddedServer(CIO, host = if (settings.wifiMode) "0.0.0.0" else "127.0.0.1", port = settings.port) {
         routing {
             get("/health") {
