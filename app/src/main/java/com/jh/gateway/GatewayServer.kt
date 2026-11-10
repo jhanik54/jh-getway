@@ -9,9 +9,11 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import io.ktor.http.HttpStatusCode
 
 /** Local-only HTTP surface. Provider forwarding is the next milestone. */
-class GatewayServer(private val port: Int = 8787) {
+class GatewayServer(private val store: ProviderStore, private val port: Int = 8787) {
+    private val router = ProviderRouter(store)
     private val server = embeddedServer(CIO, host = "127.0.0.1", port = port) {
         routing {
             get("/health") {
@@ -21,12 +23,8 @@ class GatewayServer(private val port: Int = 8787) {
                 )
             }
             post("/v1/chat/completions") {
-                call.receiveText()
-                call.respondText(
-                    "{\"id\":\"jh_pending\",\"object\":\"chat.completion\",\"choices\":[]," +
-                        "\"error\":{\"message\":\"No provider is configured yet\",\"type\":\"gateway_not_ready\"}}",
-                    ContentType.Application.Json
-                )
+                val result = router.forward(call.receiveText())
+                call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
             }
         }
     }

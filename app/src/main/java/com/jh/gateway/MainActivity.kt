@@ -40,12 +40,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -95,7 +97,9 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     val context = LocalContext.current
     var tab by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(false) }
-    var keys by remember { mutableStateOf(demoKeys) }
+    val providerStore = remember { ProviderStore(context) }
+    var keys by remember { mutableStateOf(providerStore.list().map { it.toProviderKey(providerStore) }) }
+    var showAddDialog by remember { mutableStateOf(false) }
     val tabs = listOf("Home", "Providers", "More")
 
     MaterialTheme(colorScheme = androidx.compose.material3.lightColorScheme(primary = Blue)) {
@@ -135,13 +139,48 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     }
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 })
-                1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = {
-                    keys = keys + ProviderKey("New Provider", "OpenAI Compatible", "auto", KeyStatus.ACTIVE, keys.size + 1, "key••••••new")
-                })
+                1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true })
                 else -> MoreScreen(Modifier.padding(padding))
             }
         }
+        if (showAddDialog) {
+            AddProviderDialog(
+                onDismiss = { showAddDialog = false },
+                onSave = { name, url, model, key ->
+                    providerStore.add(name, url, model, key)
+                    keys = providerStore.list().map { it.toProviderKey(providerStore) }
+                    showAddDialog = false
+                }
+            )
+        }
     }
+}
+
+private fun StoredProvider.toProviderKey(store: ProviderStore) = ProviderKey(
+    name, baseUrl.removePrefix("https://").removePrefix("http://"), model,
+    when { !enabled -> KeyStatus.DISABLED; isCoolingDown -> KeyStatus.COOLDOWN; else -> KeyStatus.ACTIVE },
+    priority, store.apiKey(this)?.let { "${it.take(4)}••••••${it.takeLast(4)}" } ?: "••••••••"
+)
+
+@Composable
+private fun AddProviderDialog(onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("https://api.openai.com") }
+    var model by remember { mutableStateOf("auto") }
+    var key by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add provider key") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("OpenAI-compatible endpoint", color = Muted, style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
+            OutlinedTextField(url, { url = it }, label = { Text("Base URL") }, singleLine = true)
+            OutlinedTextField(model, { model = it }, label = { Text("Default model") }, singleLine = true)
+            OutlinedTextField(key, { key = it }, label = { Text("API key") }, singleLine = true)
+        } },
+        confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key) }) { Text("Save securely") } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
