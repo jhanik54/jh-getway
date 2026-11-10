@@ -620,10 +620,10 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
     val activity = context as? ComponentActivity
     val manager = remember { UpdateManager(context) }
     var update by remember { mutableStateOf<AvailableUpdate?>(null) }
-    var downloadedFile by remember { mutableStateOf<File?>(null) }
+    var downloadedFile by remember { mutableStateOf(manager.existingApk()) }
     var downloading by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
-    var status by remember { mutableStateOf("Tap Check now to look for a new release.") }
+    var status by remember { mutableStateOf(if (downloadedFile != null) "A downloaded update is ready to install." else "Tap Check now to look for a new release.") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("App updates") },

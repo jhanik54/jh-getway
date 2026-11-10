@@ -43,7 +43,7 @@ class UpdateManager(private val context: Context) {
                 val apk = File(folder, "jh-getway-${update.versionName}.apk")
                 val partial = File(folder, "${apk.name}.part")
                 apk.delete(); partial.delete()
-                val connection = (URL(update.apkUrl).openConnection() as HttpURLConnection).apply { connectTimeout = 15_000; readTimeout = 120_000; instanceFollowRedirects = true; setRequestProperty("User-Agent", "JH-GetWay/${BuildConfig.VERSION_NAME}") }
+                val connection = (URL(update.apkUrl).openConnection() as HttpURLConnection).apply { connectTimeout = 15_000; readTimeout = 120_000; instanceFollowRedirects = true; setRequestProperty("User-Agent", "JH-GetWay/${BuildConfig.VERSION_NAME}"); setRequestProperty("Accept", "application/octet-stream") }
                 check(connection.responseCode in 200..299) { "APK download failed (HTTP ${connection.responseCode})" }
                 val total = connection.contentLengthLong
                 var copied = 0L
@@ -59,6 +59,11 @@ class UpdateManager(private val context: Context) {
             onResult(result)
         }.start()
     }
+
+    /** Returns a completed APK kept in app-private storage after the update dialog was closed. */
+    fun existingApk(): File? = File(context.filesDir, "updates").listFiles()
+        ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) && it.length() > 1_000_000 }
+        ?.maxByOrNull { it.lastModified() }
 
     fun openReleasePage(update: AvailableUpdate) { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.releaseUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 

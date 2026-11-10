@@ -69,3 +69,4 @@ jobs:
             - Optional app lock with device PIN/biometrics and screenshot protection
             - Dynamic version shown in the app, health endpoint, and Home address
             - Official JH GetWay launcher logo supplied by the owner
+            - Persistent downloaded update recovery after closing the update screen
