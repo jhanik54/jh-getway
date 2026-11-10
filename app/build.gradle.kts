@@ -17,8 +17,24 @@ android {
         applicationId = "com.jh.gateway"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.2.7"
+        versionCode = 10
+        versionName = "0.2.8"
+    }
+
+    val stableStore = file(System.getenv("JH_SIGNING_STORE") ?: "${System.getProperty("user.home")}/.android/jh-getway-release.keystore")
+    signingConfigs {
+        create("stable") {
+            storeFile = stableStore
+            storePassword = System.getenv("JH_SIGNING_PASSWORD") ?: "changeit"
+            keyAlias = "jh_gateway"
+            keyPassword = System.getenv("JH_SIGNING_PASSWORD") ?: "changeit"
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (stableStore.exists()) signingConfig = signingConfigs.getByName("stable")
+        }
     }
 
     buildFeatures {
