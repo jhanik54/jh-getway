@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-data class ForwardResult(val status: Int, val body: String, val provider: String? = null)
+data class ForwardResult(val status: Int, val body: String, val provider: String? = null, val retryAfterMillis: Long? = null)
 
 class ProviderRouter(private val store: ProviderStore, private val chainStore: ChainStore) {
     private val roundRobin = ConcurrentHashMap<String, AtomicInteger>()
@@ -26,8 +26,8 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
                     return last.copy(provider = provider.name)
                 }
                 last.status == 401 || last.status == 403 -> store.disable(provider)
-                last.status == 429 -> store.markCooldown(provider, 60_000)
-                last.status >= 500 -> store.markCooldown(provider, 30_000)
+                last.status == 429 -> store.markCooldown(provider, last.retryAfterMillis ?: 60_000)
+                last.status >= 500 -> store.markCooldown(provider, last.retryAfterMillis ?: 30_000)
             }
         }
         return last
@@ -58,8 +58,8 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
                 return ForwardResult(status, "", provider.name)
             }
             if (status == 401 || status == 403) store.disable(provider)
-            if (status == 429) store.markCooldown(provider, 60_000)
-            if (status >= 500) store.markCooldown(provider, 30_000)
+            if (status == 429) store.markCooldown(provider, retryAfter(connection) ?: 60_000)
+            if (status >= 500) store.markCooldown(provider, retryAfter(connection) ?: 30_000)
             connection.disconnect()
         }
         return ForwardResult(502, "{\"error\":{\"message\":\"All providers failed before streaming\",\"type\":\"provider_error\"}}")
@@ -90,10 +90,11 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
     private fun request(provider: StoredProvider, key: String, body: String): ForwardResult {
         val connection = open(provider, key, ProtocolAdapter.toProvider(body, provider))
         val status = connection.responseCode
+        val retryAfter = retryAfter(connection)
         val stream = if (status >= 400) connection.errorStream else connection.inputStream
         val response = stream?.bufferedReader()?.use { it.readText() } ?: ""
         connection.disconnect()
-        return ForwardResult(status, ProtocolAdapter.fromProvider(response, provider))
+        return ForwardResult(status, ProtocolAdapter.fromProvider(response, provider), retryAfterMillis = retryAfter)
     }
 
     private fun open(provider: StoredProvider, key: String, body: String): HttpURLConnection {
@@ -111,5 +112,6 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
     }
 
     private fun endpoint(base: String, protocol: ProviderProtocol): String = if (protocol == ProviderProtocol.ANTHROPIC) { if (base.endsWith("/v1")) "$base/messages" else "$base/v1/messages" } else if (base.endsWith("/v1")) "$base/chat/completions" else "$base/v1/chat/completions"
+    private fun retryAfter(connection: HttpURLConnection): Long? = connection.getHeaderField("Retry-After")?.trim()?.let { value -> value.toLongOrNull()?.times(1_000L) ?: runCatching { java.time.ZonedDateTime.parse(value).toInstant().toEpochMilli() - System.currentTimeMillis() }.getOrNull()?.coerceAtLeast(1_000L) }
     private fun escape(value: String) = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ")
 }
