@@ -64,3 +64,4 @@ jobs:
             - Privacy-safe request logs and usage summary dashboard
             - Password-protected backup export/import with file picker
             - Stable signing certificate for future no-uninstall updates
+            - App-owned update download with visible progress and later install
