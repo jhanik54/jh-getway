@@ -54,6 +54,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,6 +106,8 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var keys by remember { mutableStateOf(providerStore.list().map { it.toProviderKey(providerStore) }) }
     var showAddDialog by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf("") }
+    var showSettings by remember { mutableStateOf(false) }
+    val gatewaySettings = remember { GatewaySettings(context) }
     val tabs = listOf("Home", "Providers", "More")
 
     MaterialTheme(colorScheme = androidx.compose.material3.lightColorScheme(primary = Blue)) {
@@ -148,7 +151,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, onAdd = { showAddDialog = true })
-                else -> MoreScreen(Modifier.padding(padding), updateMessage) {
+                else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }) {
                     updateMessage = "Checking for updates…"
                     val activity = context as? ComponentActivity
                     UpdateManager(context).check { result ->
@@ -177,6 +180,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                 }
             )
         }
+        if (showSettings) SettingsDialog(gatewaySettings, onDismiss = { showSettings = false })
     }
 }
 
@@ -332,16 +336,31 @@ private fun StatusPill(status: KeyStatus) {
 }
 
 @Composable
-private fun MoreScreen(modifier: Modifier, updateMessage: String, onUpdate: () -> Unit) {
+private fun MoreScreen(modifier: Modifier, updateMessage: String, onSettings: () -> Unit, onUpdate: () -> Unit) {
     Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.height(8.dp)); Text("More", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text("Control how JH GetWay works", color = Muted)
         MoreItem(Icons.Default.Storage, "Routing chain", "Set priority and fallback order")
         MoreItem(Icons.Default.Refresh, "Request logs", "Review provider switches and errors")
-        MoreItem(Icons.Default.Settings, "Settings", "Network, appearance and security")
+        MoreItem(Icons.Default.Settings, "Settings", "Network, appearance and security", onSettings)
         MoreItem(Icons.Default.Security, "Backup & security", "Encrypted export and app lock")
         MoreItem(Icons.Default.SystemUpdate, "App updates", if (updateMessage.isBlank()) "Check GitHub for a newer APK" else updateMessage, onClick = onUpdate)
         Spacer(Modifier.weight(1f)); OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("JH GetWay v0.1.0") }
     }
+}
+
+@Composable
+private fun SettingsDialog(settings: GatewaySettings, onDismiss: () -> Unit) {
+    var wifi by remember { mutableStateOf(settings.wifiMode) }
+    var boot by remember { mutableStateOf(settings.startOnBoot) }
+    var port by remember { mutableStateOf(settings.port.toString()) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Gateway settings") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Changes apply the next time the gateway starts.", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Wi-Fi open", fontWeight = FontWeight.SemiBold); Text("Allow devices on the same Wi-Fi", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(wifi, { wifi = it }) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Start on boot", fontWeight = FontWeight.SemiBold); Text("Start gateway after phone reboot", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(boot, { boot = it }) }
+            OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text("Port") }, singleLine = true)
+        }
+    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; port.toIntOrNull()?.let { settings.port = it }; onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 @Composable
