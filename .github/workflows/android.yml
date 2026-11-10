@@ -48,3 +48,4 @@ jobs:
             - Install update action with Android permission guidance
             - Persistent Best/Good/Basic routing chain with reorder controls
             - Privacy-safe request logs and usage summary dashboard
+            - Password-protected backup export/import with file picker
