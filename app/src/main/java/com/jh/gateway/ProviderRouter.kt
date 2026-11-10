@@ -69,7 +69,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         val providers = store.list().filter { provider ->
         provider.enabled && !provider.isCoolingDown && (requestedModel.isBlank() || requestedModel == "auto" || provider.model == "auto" || provider.model == requestedModel)
         }
-        val chain = chainStore.load(store.list()).withIndex().associate { it.value.id to (it.index to it.value.tier.ordinal) }
+        val chain = chainStore.load(store.list()).filter { it.enabled }.withIndex().associate { it.value.id to (it.index to it.value.tier.ordinal) }
         val sorted = providers.sortedWith(compareBy({ chain[it.id]?.second ?: 0 }, { chain[it.id]?.first ?: Int.MAX_VALUE }, { it.priority }))
         sessionKey(body)?.let { key -> sticky[key]?.let { id -> sorted.firstOrNull { it.id == id }?.let { selected -> return listOf(selected) + sorted.filterNot { it.id == selected.id } } } }
         if (sorted.size < 2) return sorted

@@ -10,8 +10,9 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
-data class AvailableUpdate(val versionCode: Int, val versionName: String, val notes: String, val apkUrl: String, val releaseUrl: String)
+data class AvailableUpdate(val versionCode: Int, val versionName: String, val notes: String, val apkUrl: String, val releaseUrl: String, val sha256: String? = null)
 
 /** App-owned updater: APK is stored under files/updates and remains available for later install. */
 class UpdateManager(private val context: Context) {
@@ -28,10 +29,14 @@ class UpdateManager(private val context: Context) {
                 }
                 check(connection.responseCode in 200..299) { "GitHub returned HTTP ${connection.responseCode}" }
                 val release = JSONObject(connection.inputStream.bufferedReader().use { it.readText() }); connection.disconnect()
-                val asset = release.optJSONArray("assets")?.let { assets -> (0 until assets.length()).asSequence().map { assets.getJSONObject(it) }.firstOrNull { it.optString("name").endsWith(".apk") } } ?: error("No APK asset found")
-                val versionName = release.optString("tag_name", "v0.0.0").removePrefix("v")
-                val versionCode = versionName.substringBefore('.').toIntOrNull() ?: 0
-                val found = if (versionCode > BuildConfig.VERSION_CODE) AvailableUpdate(versionCode, versionName, release.optString("body").ifBlank { "Performance improvements and bug fixes." }, asset.getString("browser_download_url"), release.optString("html_url")) else null
+                val assets = release.optJSONArray("assets") ?: error("Release has no assets")
+                val asset = (0 until assets.length()).asSequence().map { assets.getJSONObject(it) }.firstOrNull { it.optString("name").equals("app-debug.apk", true) || it.optString("name").endsWith(".apk") } ?: error("No APK asset found")
+                val metadataAsset = (0 until assets.length()).asSequence().map { assets.getJSONObject(it) }.firstOrNull { it.optString("name") == "latest.json" }
+                val metadata = metadataAsset?.let { readJson(it.getString("browser_download_url")) }
+                val versionName = metadata?.optString("versionName").orEmpty().ifBlank { release.optString("tag_name", "v0.0.0").removePrefix("v") }
+                val versionCode = metadata?.optInt("versionCode", 0)?.takeIf { it > 0 } ?: versionName.substringBefore('.').toIntOrNull() ?: 0
+                val apkUrl = metadata?.optString("apkUrl").orEmpty().ifBlank { asset.getString("browser_download_url") }
+                val found = if (versionCode > BuildConfig.VERSION_CODE) AvailableUpdate(versionCode, versionName, release.optString("body").ifBlank { "Performance improvements and bug fixes." }, apkUrl, release.optString("html_url"), metadata?.optString("sha256")?.ifBlank { null }) else null
                 if (found == null) clearCachedUpdate() else cacheUpdate(found)
                 found
             }
@@ -45,14 +50,14 @@ class UpdateManager(private val context: Context) {
             val value = JSONObject(cached)
             val versionCode = value.getInt("versionCode")
             if (versionCode <= BuildConfig.VERSION_CODE) { clearCachedUpdate(); null }
-            else AvailableUpdate(versionCode, value.getString("versionName"), value.getString("notes"), value.getString("apkUrl"), value.getString("releaseUrl"))
+            else AvailableUpdate(versionCode, value.getString("versionName"), value.getString("notes"), value.getString("apkUrl"), value.getString("releaseUrl"), value.optString("sha256").ifBlank { null })
         }.getOrNull()
     }
 
     private fun cacheUpdate(update: AvailableUpdate) {
         updatePrefs.edit().putString("json", JSONObject().apply {
             put("versionCode", update.versionCode); put("versionName", update.versionName); put("notes", update.notes)
-            put("apkUrl", update.apkUrl); put("releaseUrl", update.releaseUrl)
+            put("apkUrl", update.apkUrl); put("releaseUrl", update.releaseUrl); put("sha256", update.sha256 ?: "")
         }.toString()).apply()
     }
 
@@ -76,11 +81,23 @@ class UpdateManager(private val context: Context) {
                 connection.disconnect()
                 check(partial.length() > 1_000_000) { "Downloaded APK is incomplete" }
                 check(partial.inputStream().use { input -> input.read() == 'P'.code && input.read() == 'K'.code }) { "Downloaded file is not a valid APK" }
+                update.sha256?.let { expected -> check(sha256(partial).equals(expected, true)) { "APK checksum verification failed" } }
                 check(partial.renameTo(apk)) { "Could not save APK inside app storage" }
                 apk
             }
             onResult(result)
         }.start()
+    }
+
+    private fun readJson(url: String): JSONObject? = runCatching {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply { connectTimeout = 15_000; readTimeout = 15_000; setRequestProperty("User-Agent", "JH-GetWay/${BuildConfig.VERSION_NAME}") }
+        connection.inputStream.bufferedReader().use { JSONObject(it.readText()) }.also { connection.disconnect() }
+    }.getOrNull()
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input -> val buffer = ByteArray(32 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; digest.update(buffer, 0, count) } }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     /** Returns a completed APK kept in app-private storage after the update dialog was closed. */
