@@ -4,6 +4,8 @@ import android.content.Intent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Bundle
+import android.app.KeyguardManager
+import android.view.WindowManager
 import android.provider.Settings as AndroidSettings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -85,13 +87,44 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 
 class MainActivity : ComponentActivity() {
+    private lateinit var securitySettings: GatewaySettings
+    private var lockPromptShowing = false
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        securitySettings = GatewaySettings(this)
+        applyScreenshotProtection()
         setContent { GatewayApp(onRequestNotifications = { requestNotificationPermission() }) }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!::securitySettings.isInitialized) return
+        if (lockPromptShowing) return
+        val needsLock = securitySettings.appLock && System.currentTimeMillis() - securitySettings.lastUnlock > 30_000
+        if (needsLock) {
+            val keyguard = getSystemService(KeyguardManager::class.java)
+            if (keyguard.isKeyguardSecure) {
+                lockPromptShowing = true
+                startActivityForResult(keyguard.createConfirmDeviceCredentialIntent("Unlock JH GetWay", "Verify your screen lock to continue"), 701)
+            } else securitySettings.lastUnlock = System.currentTimeMillis()
+        } else if (!lockPromptShowing) securitySettings.lastUnlock = System.currentTimeMillis()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 701) {
+            lockPromptShowing = false
+            if (resultCode == RESULT_OK) securitySettings.lastUnlock = System.currentTimeMillis() else finish()
+        }
+    }
+
+    private fun applyScreenshotProtection() {
+        if (securitySettings.screenshotBlock) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
     }
 
     private fun requestNotificationPermission() {
@@ -193,13 +226,18 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                 }
             )
         }
-        if (showSettings) SettingsDialog(gatewaySettings, onDismiss = { showSettings = false })
+        if (showSettings) SettingsDialog(gatewaySettings, onSecurityChanged = { (context as? MainActivity)?.applySecurityFromUi() }, onDismiss = { showSettings = false })
         if (showUpdateDialog) UpdateDialog(onDismiss = { showUpdateDialog = false })
         if (showChainDialog) ChainDialog(providerStore, onDismiss = { showChainDialog = false })
         if (showMonitoringDialog) MonitoringDialog(GatewayStats(context), onDismiss = { showMonitoringDialog = false })
         if (showBackupDialog) BackupDialog(providerStore, onDismiss = { showBackupDialog = false })
         if (showHelpDialog) HelpDialog(gatewaySettings, gatewaySecurity, onDismiss = { showHelpDialog = false })
     }
+}
+
+private fun MainActivity.applySecurityFromUi() {
+    if (GatewaySettings(this).screenshotBlock) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
 }
 
 private fun StoredProvider.toProviderKey(store: ProviderStore) = ProviderKey(
@@ -524,18 +562,22 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun SettingsDialog(settings: GatewaySettings, onDismiss: () -> Unit) {
+private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> Unit, onDismiss: () -> Unit) {
     var wifi by remember { mutableStateOf(settings.wifiMode) }
     var boot by remember { mutableStateOf(settings.startOnBoot) }
+    var appLock by remember { mutableStateOf(settings.appLock) }
+    var screenshotBlock by remember { mutableStateOf(settings.screenshotBlock) }
     var port by remember { mutableStateOf(settings.port.toString()) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Gateway settings") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Changes apply the next time the gateway starts.", color = Muted, style = MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Wi-Fi open", fontWeight = FontWeight.SemiBold); Text("Allow devices on the same Wi-Fi", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(wifi, { wifi = it }) }
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Start on boot", fontWeight = FontWeight.SemiBold); Text("Start gateway after phone reboot", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(boot, { boot = it }) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("App lock", fontWeight = FontWeight.SemiBold); Text("Require phone PIN or biometrics after 30 seconds", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(appLock, { appLock = it }) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Block screenshots", fontWeight = FontWeight.SemiBold); Text("Hide app content from screenshots and recent apps", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(screenshotBlock, { screenshotBlock = it }) }
             OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text("Port") }, singleLine = true)
         }
-    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; port.toIntOrNull()?.let { settings.port = it }; onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onDismiss() }) { Text("Save") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 @Composable
