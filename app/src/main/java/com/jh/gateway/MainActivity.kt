@@ -51,6 +51,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -508,6 +509,8 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
     val manager = remember { UpdateManager(context) }
     var update by remember { mutableStateOf<AvailableUpdate?>(null) }
     var downloadedFile by remember { mutableStateOf<File?>(null) }
+    var downloading by remember { mutableStateOf(false) }
+    var progress by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf("Tap Check now to look for a new release.") }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -516,6 +519,8 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Current version ${BuildConfig.VERSION_NAME}", color = Muted, style = MaterialTheme.typography.bodySmall)
                 Text(status, color = Muted)
+                if (downloading) LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
+                if (downloading) Text("$progress% · Saved inside JH GetWay", color = Muted, style = MaterialTheme.typography.labelSmall)
                 update?.let { available ->
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F6FA))) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -530,9 +535,10 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
         confirmButton = {
             when {
                 downloadedFile != null -> Button(onClick = { manager.install(downloadedFile!!) { status = it } }) { Text("Install update") }
+                downloading -> Button(enabled = false, onClick = {}) { Text("Downloading $progress%") }
                 update != null -> Button(onClick = {
-                    status = "Download started. Android Download Manager is handling it…"
-                    manager.download(update!!) { result -> activity?.runOnUiThread { result.onSuccess { downloadedFile = it; status = "Download complete. Tap Install update." }.onFailure { status = "Download failed: ${it.message}" } } }
+                    downloading = true; progress = 0; status = "Downloading inside JH GetWay…"
+                    manager.download(update!!, { value -> activity?.runOnUiThread { progress = value } }) { result -> activity?.runOnUiThread { downloading = false; result.onSuccess { downloadedFile = it; progress = 100; status = "Download complete. Tap Install update." }.onFailure { status = "Download failed: ${it.message}" } } }
                 }) { Text("Download update") }
                 else -> Button(onClick = {
                     status = "Checking GitHub releases…"
