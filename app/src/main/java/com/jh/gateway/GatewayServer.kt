@@ -32,7 +32,7 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
             post("/v1/chat/completions") {
                 if (!call.authorized()) return@post
                 val body = call.receiveText()
-                if (body.contains("\"stream\"\s*:\s*true".toRegex())) {
+                if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
                     call.respondOutputStream(ContentType.Text.EventStream) { router.stream(body, this) }
                 } else {
                     val result = router.forward(body)
