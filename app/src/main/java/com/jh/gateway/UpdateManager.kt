@@ -75,6 +75,7 @@ class UpdateManager(private val context: Context) {
                 } }
                 connection.disconnect()
                 check(partial.length() > 1_000_000) { "Downloaded APK is incomplete" }
+                check(partial.inputStream().use { input -> input.read() == 'P'.code && input.read() == 'K'.code }) { "Downloaded file is not a valid APK" }
                 check(partial.renameTo(apk)) { "Could not save APK inside app storage" }
                 apk
             }
@@ -97,10 +98,11 @@ class UpdateManager(private val context: Context) {
     fun openReleasePage(update: AvailableUpdate) { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.releaseUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 
     fun install(file: File, onError: (String) -> Unit = {}) {
+        if (!file.exists() || file.length() < 1_000_000) { onError("Update APK is missing or incomplete. Download it again."); return }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
             context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); onError("Allow installation permission, then tap Install update again"); return
         }
         val uri = FileProvider.getUriForFile(context, "com.jh.gateway.fileprovider", file)
-        context.startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/vnd.android.package-archive"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION) })
+        context.startActivity(Intent(Intent.ACTION_INSTALL_PACKAGE).apply { setDataAndType(uri, "application/vnd.android.package-archive"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_CLEAR_TOP) })
     }
 }
