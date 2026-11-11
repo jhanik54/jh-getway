@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger
 enum class ProviderFailure { AUTHENTICATION, RATE_LIMIT, INVALID_REQUEST, INVALID_MODEL, TIMEOUT, NETWORK, SERVER, UNKNOWN }
 data class ForwardResult(val status: Int, val body: String, val provider: String? = null, val retryAfterMillis: Long? = null, val failure: ProviderFailure? = null)
 
-class ProviderRouter(private val store: ProviderStore, private val chainStore: ChainStore, private val settings: GatewaySettings) {
+class ProviderRouter(private val store: ProviderStore, private val chainStore: ChainStore, private val settings: GatewaySettings, private val health: ProviderHealthStore? = null) {
     private val roundRobin = ConcurrentHashMap<String, AtomicInteger>()
     private data class StickyRoute(val providerId: String, val expiresAt: Long)
     private val sticky = ConcurrentHashMap<String, StickyRoute>()
@@ -21,9 +21,11 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         var last = ForwardResult(502, "{\"error\":{\"message\":\"No provider response\",\"type\":\"provider_error\"}}")
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
+            val started = System.currentTimeMillis()
             last = runCatching { request(provider, key, body) }.getOrElse { error -> ForwardResult(502, "{\"error\":{\"message\":\"${escape(error.message ?: "Network error")}\",\"type\":\"network_error\"}}", provider.name, failure = if (error is java.net.SocketTimeoutException) ProviderFailure.TIMEOUT else ProviderFailure.NETWORK) }
             when {
                 last.status in 200..299 -> {
+                    health?.recordSuccess(provider, System.currentTimeMillis() - started)
                     if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L) }
                     return last.copy(provider = provider.name)
                 }
@@ -33,6 +35,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
                 last.status == 429 -> store.markCooldown(provider, last.retryAfterMillis ?: 60_000)
                 last.status == 529 || last.status >= 500 -> store.markCooldown(provider, last.retryAfterMillis ?: 30_000)
             }
+            last.failure?.let { health?.recordFailure(provider, it, last.status) }
         }
         return last
     }
@@ -59,6 +62,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
                         }
                     } }
                     if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L) }
+                    health?.recordSuccess(provider, 0L)
                     return ForwardResult(status, "", provider.name)
                 } finally { connection.disconnect() }
             }
@@ -67,6 +71,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             if (status == 408) store.markCooldown(provider, retryAfter(connection) ?: 15_000)
             if (status == 429) store.markCooldown(provider, retryAfter(connection) ?: 60_000)
             if (status == 529 || status >= 500) store.markCooldown(provider, retryAfter(connection) ?: 30_000)
+            health?.recordFailure(provider, classify(status) ?: ProviderFailure.UNKNOWN, status)
             connection.disconnect()
         }
         return ForwardResult(502, "{\"error\":{\"message\":\"All providers failed before streaming\",\"type\":\"provider_error\"}}")

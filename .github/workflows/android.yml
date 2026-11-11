@@ -98,3 +98,4 @@ jobs:
             - Android-runtime protocol fixture tests prepared for device execution
             - Configurable concurrent request limit and upstream stream cleanup
             - Classified provider failures with bounded cooldown and safe invalid-request handling
+            - Provider health state and rate-limited failure notifications

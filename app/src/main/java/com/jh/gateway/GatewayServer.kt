@@ -17,8 +17,8 @@ import io.ktor.util.AttributeKey
 import java.util.concurrent.Semaphore
 
 /** Local-only HTTP surface. Provider forwarding is the next milestone. */
-class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val stats: GatewayStats, private val settings: GatewaySettings, chainStore: ChainStore) {
-    private val router = ProviderRouter(store, chainStore, settings)
+class GatewayServer(private val store: ProviderStore, private val security: GatewaySecurity, private val stats: GatewayStats, private val settings: GatewaySettings, chainStore: ChainStore, health: ProviderHealthStore? = null) {
+    private val router = ProviderRouter(store, chainStore, settings, health)
     private val requestPermits = Semaphore(settings.maxConcurrent, true)
     private val permitKey = AttributeKey<Boolean>("jh-gateway-request-permit")
     private val server = embeddedServer(CIO, host = if (settings.wifiMode) "0.0.0.0" else "127.0.0.1", port = settings.port) {
