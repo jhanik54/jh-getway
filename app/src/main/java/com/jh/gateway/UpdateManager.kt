@@ -2,6 +2,8 @@ package com.jh.gateway
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -82,6 +84,7 @@ class UpdateManager(private val context: Context) {
                 check(partial.length() > 1_000_000) { "Downloaded APK is incomplete" }
                 check(partial.inputStream().use { input -> input.read() == 'P'.code && input.read() == 'K'.code }) { "Downloaded file is not a valid APK" }
                 update.sha256?.let { expected -> check(sha256(partial).equals(expected, true)) { "APK checksum verification failed" } }
+                verifyApk(partial)?.let { problem -> partial.delete(); throw IllegalStateException(problem) }
                 check(partial.renameTo(apk)) { "Could not save APK inside app storage" }
                 apk
             }
@@ -100,6 +103,47 @@ class UpdateManager(private val context: Context) {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * Verifies that [apk] is an installable, newer APK of this same app, signed by the
+     * same certificate this installation uses. Returns a user-presentable failure
+     * message, or null when the APK may be installed as an update.
+     */
+    private fun verifyApk(apk: File): String? {
+        val archiveFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+        @Suppress("DEPRECATION")
+        val info = context.packageManager.getPackageArchiveInfo(apk.absolutePath, archiveFlags)
+            ?: return "Downloaded file is not an installable APK"
+        if (info.packageName != context.packageName) return "APK package mismatch (expected ${context.packageName}, got ${info.packageName})"
+        val candidateVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
+        if (candidateVersion <= BuildConfig.VERSION_CODE) return "Downloaded APK version ($candidateVersion) is not newer than the installed version (${BuildConfig.VERSION_CODE})"
+        val expected = currentSigningDigests()
+        val actual = archiveSigningDigests(info)
+        if (expected.isEmpty() || actual.isEmpty()) return "Could not read the APK signing certificate"
+        if (actual.none { it in expected }) return "APK signing certificate does not match this installation. Install it manually only if you trust its source."
+        return null
+    }
+
+    private fun currentSigningDigests(): Set<String> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+            return info.signingInfo?.apkContentsSigners?.map { sha256(it.toByteArray()) }?.toSet().orEmpty()
+        }
+        @Suppress("DEPRECATION")
+        val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES)
+        @Suppress("DEPRECATION")
+        return info.signatures?.map { sha256(it.toByteArray()) }?.toSet().orEmpty()
+    }
+
+    private fun archiveSigningDigests(info: PackageInfo): Set<String> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return info.signingInfo?.apkContentsSigners?.map { sha256(it.toByteArray()) }?.toSet().orEmpty()
+        }
+        @Suppress("DEPRECATION")
+        return info.signatures?.map { sha256(it.toByteArray()) }?.toSet().orEmpty()
+    }
+
+    private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
     /** Returns a completed APK kept in app-private storage after the update dialog was closed. */
     fun existingApk(): File? {
         val folder = File(context.filesDir, "updates")
@@ -116,6 +160,9 @@ class UpdateManager(private val context: Context) {
 
     fun install(file: File, onError: (String) -> Unit = {}) {
         if (!file.exists() || file.length() < 1_000_000) { onError("Update APK is missing or incomplete. Download it again."); return }
+        // Re-verify before handing the file to the package installer: the file may
+        // have been replaced or tampered with since the download completed.
+        verifyApk(file)?.let { onError(it); return }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
             context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); onError("Allow installation permission, then tap Install update again"); return
         }
