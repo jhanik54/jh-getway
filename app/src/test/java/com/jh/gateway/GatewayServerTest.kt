@@ -11,19 +11,25 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.net.HttpURLConnection
+import java.net.ServerSocket
 import java.net.URL
 
 /**
  * Verifies the gateway HTTP surface over a real loopback socket: authentication, the
  * concurrency permit accounting (a leaked permit used to wedge the whole gateway after
  * a handful of GET requests), and the health endpoints.
+ *
+ * The server is started once for the whole class and bound to a free port, because
+ * starting a CIO engine per test leaves non-daemon threads behind and stalls the
+ * Gradle test JVM.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(shadows = [ShadowKeyGenParameterSpecBuilder::class])
 class GatewayServerTest {
     private val context: Context = RuntimeEnvironment.getApplication()
-    private lateinit var server: GatewayServer
+    private var server: GatewayServer? = null
     private lateinit var security: GatewaySecurity
+    private var port: Int = 0
 
     @Before
     fun setUp() {
@@ -31,22 +37,30 @@ class GatewayServerTest {
         for (name in listOf("gateway_providers", "provider_health", "gateway_chain", "gateway_settings", "gateway_stats", "gateway_security")) {
             context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
         }
-        val settings = GatewaySettings(context)
-        settings.maxConcurrent = 2
-        security = GatewaySecurity(context)
-        server = GatewayServer(ProviderStore(context), security, GatewayStats(context), settings, ChainStore(context), ProviderHealthStore(context))
-        server.start()
-        // The CIO engine binds asynchronously; give it a moment to accept connections.
-        Thread.sleep(600)
+        if (server == null) {
+            val settings = GatewaySettings(context)
+            settings.maxConcurrent = 2
+            settings.port = freePort()
+            port = settings.port
+            security = GatewaySecurity(context)
+            val instance = GatewayServer(ProviderStore(context), security, GatewayStats(context), settings, ChainStore(context), ProviderHealthStore(context))
+            instance.start()
+            server = instance
+            // The CIO engine binds asynchronously; give it a moment to accept connections.
+            Thread.sleep(800)
+        }
     }
 
     @After
     fun tearDown() {
-        if (::server.isInitialized) runCatching { server.stop() }
+        server?.let { runCatching { it.stop() } }
+        server = null
     }
 
+    private fun freePort(): Int = ServerSocket(0).use { it.localPort }
+
     private fun get(path: String, key: String? = null): Pair<Int, String> {
-        val connection = (URL("http://127.0.0.1:${GatewaySettings(context).port}$path").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("http://127.0.0.1:$port$path").openConnection() as HttpURLConnection).apply {
             connectTimeout = 5_000; readTimeout = 5_000
             if (key != null) setRequestProperty("Authorization", "Bearer $key")
         }

@@ -21,7 +21,7 @@ class ProviderHealthStore(private val context: Context) {
         val message = "${failure.name.lowercase().replace('_', ' ')} (HTTP $status)"
         val preservedLatency = get(provider.id)?.lastLatencyMs ?: 0L
         save(provider, "unhealthy", message, preservedLatency)
-        notifyOnce(provider.name, message)
+        notifyOnce(provider.id, provider.name, message)
     }
 
     fun get(providerId: String): ProviderHealth? = runCatching { JSONObject(prefs.getString("health_$providerId", null) ?: return null).let { ProviderHealth(providerId, it.optString("provider"), it.optString("status"), it.optString("error"), it.optLong("latency"), it.optLong("updatedAt")) } }.getOrNull()
@@ -30,15 +30,17 @@ class ProviderHealthStore(private val context: Context) {
         prefs.edit().putString("health_${provider.id}", JSONObject().apply { put("provider", provider.name); put("status", status); put("error", error); put("latency", latency); put("updatedAt", System.currentTimeMillis()) }.toString()).apply()
     }
 
-    private fun notifyOnce(provider: String, message: String) {
+    private fun notifyOnce(providerId: String, providerName: String, message: String) {
         val now = System.currentTimeMillis()
-        if (now - prefs.getLong("last_notification", 0L) < 5 * 60_000L) return
-        prefs.edit().putLong("last_notification", now).apply()
+        // Throttle per provider, not globally: a failure on one provider must not
+        // silence the warning for a different provider.
+        if (now - prefs.getLong("last_notification_$providerId", 0L) < 5 * 60_000L) return
+        prefs.edit().putLong("last_notification_$providerId", now).apply()
         // Best-effort: posting a notification must never break recording health.
         runCatching {
             val manager = context.getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(NotificationChannel(CHANNEL, "Provider health", NotificationManager.IMPORTANCE_DEFAULT))
-            manager.notify(NOTIFICATION_ID, NotificationCompat.Builder(context, CHANNEL).setSmallIcon(android.R.drawable.stat_notify_error).setContentTitle("JH GetWay provider warning").setContentText("$provider: $message").setAutoCancel(true).build())
+            manager.notify(NOTIFICATION_ID, NotificationCompat.Builder(context, CHANNEL).setSmallIcon(android.R.drawable.stat_notify_error).setContentTitle("JH GetWay provider warning").setContentText("$providerName: $message").setAutoCancel(true).build())
         }
     }
 
