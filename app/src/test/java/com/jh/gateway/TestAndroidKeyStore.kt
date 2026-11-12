@@ -31,7 +31,7 @@ object TestAndroidKeyStore {
 
     fun install() {
         Security.removeProvider(PROVIDER_NAME)
-        Security.addProvider(object : Provider(PROVIDER_NAME, "1.0", "In-memory stand-in for tests") {
+        Security.addProvider(object : Provider(PROVIDER_NAME, 1.0, "In-memory stand-in for tests") {
             init {
                 put("KeyStore.AndroidKeyStore", SoftwareKeyStoreSpi::class.java.name)
                 put("KeyGenerator.AES", SoftwareKeyGeneratorSpi::class.java.name)
