@@ -34,9 +34,12 @@ class ProviderHealthStore(private val context: Context) {
         val now = System.currentTimeMillis()
         if (now - prefs.getLong("last_notification", 0L) < 5 * 60_000L) return
         prefs.edit().putLong("last_notification", now).apply()
-        val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Provider health", NotificationManager.IMPORTANCE_DEFAULT))
-        manager.notify(NOTIFICATION_ID, NotificationCompat.Builder(context, CHANNEL).setSmallIcon(android.R.drawable.stat_notify_error).setContentTitle("JH GetWay provider warning").setContentText("$provider: $message").setAutoCancel(true).build())
+        // Best-effort: posting a notification must never break recording health.
+        runCatching {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(NotificationChannel(CHANNEL, "Provider health", NotificationManager.IMPORTANCE_DEFAULT))
+            manager.notify(NOTIFICATION_ID, NotificationCompat.Builder(context, CHANNEL).setSmallIcon(android.R.drawable.stat_notify_error).setContentTitle("JH GetWay provider warning").setContentText("$provider: $message").setAutoCancel(true).build())
+        }
     }
 
     companion object { private const val CHANNEL = "provider_health"; private const val NOTIFICATION_ID = 2002 }
