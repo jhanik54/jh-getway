@@ -119,11 +119,11 @@ class RoutingFallbackTest {
         assertTrue(translated.contains("ping"))
     }
 
-    @Test
+    @Test(timeout = 60_000)
     fun stickyRoutesAreBounded() {
         val store = store()
-        openAiServer.enqueueOk()
-        val settings = GatewaySettings(context)
+        // Enqueue enough responses so no request ever waits for a socket timeout.
+        repeat(700) { openAiServer.enqueueOk() }
         val instance = router(store)
         // Distinct conversation ids create distinct sticky routes.
         repeat(600) { index ->

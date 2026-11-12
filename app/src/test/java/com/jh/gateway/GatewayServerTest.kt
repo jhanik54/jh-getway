@@ -53,8 +53,11 @@ class GatewayServerTest {
 
     @After
     fun tearDown() {
-        server?.let { runCatching { it.stop() } }
+        server?.let { instance -> runCatching { instance.stop() } }
         server = null
+        // The CIO engine keeps non-daemon worker threads alive; without this the Gradle
+        // test JVM never exits and the CI job stalls after the tests pass.
+        Thread.sleep(200)
     }
 
     private fun freePort(): Int = ServerSocket(0).use { it.localPort }
