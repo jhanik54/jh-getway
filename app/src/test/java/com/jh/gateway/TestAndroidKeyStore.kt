@@ -3,6 +3,7 @@ package com.jh.gateway
 import android.security.keystore.KeyGenParameterSpec
 import java.io.InputStream
 import java.io.OutputStream
+import java.lang.reflect.Constructor
 import java.security.Key
 import java.security.KeyStore
 import java.security.KeyStoreSpi
@@ -20,6 +21,62 @@ import javax.crypto.KeyGeneratorSpi
 import javax.crypto.SecretKey
 import org.robolectric.annotation.Implements
 import org.robolectric.annotation.Implementation
+
+/**
+ * Robolectric shadow for KeyGenParameterSpec.Builder.
+ * Robolectric does not ship android.security.keystore, so the app's
+ * KeyGenParameterSpec.Builder(...) chain cannot run against android-all
+ * stubs (every method throws "not mocked"). This shadow lets the software
+ * KeyGeneratorSpi read the keystoreAlias from the spec so providerStore and
+ * gatewaySecurity can each persist their own master key alias.
+ */
+@Implements(android.security.keystore.KeyGenParameterSpec.Builder::class)
+class ShadowKeyGenParameterSpecBuilder {
+    private var alias: String = ""
+
+    @Implementation
+    fun __constructor__(keystoreAlias: String, purposes: Int) {
+        alias = keystoreAlias
+    }
+
+    @Implementation
+    fun setBlockModes(vararg blockModes: String): android.security.keystore.KeyGenParameterSpec.Builder {
+        return this
+    }
+
+    @Implementation
+    fun setEncryptionPaddings(vararg paddings: String): android.security.keystore.KeyGenParameterSpec.Builder {
+        return this
+    }
+
+    @Implementation
+    fun build(): android.security.keystore.KeyGenParameterSpec {
+        try {
+            val ctor = KeyGenParameterSpec::class.java.getDeclaredConstructor(String::class.java, Int::class.java)
+            ctor.isAccessible = true
+            return ctor.newInstance(alias, 1)
+        } catch (e: Exception) {
+            throw RuntimeException("Failed to instantiate KeyGenParameterSpec via reflection", e)
+        }
+    }
+}
+
+/**
+ * Robolectric shadow for KeyGenParameterSpec, exposing getKeystoreAlias()
+ * so that SoftwareKeyGeneratorSpi.engineGenerateKey can read the alias.
+ */
+@Implements(android.security.keystore.KeyGenParameterSpec::class)
+class ShadowKeyGenParameterSpec {
+    private var alias: String = ""
+
+    @Implementation
+    fun __constructor__(keyAlias: String, purposes: Int) {
+        alias = keyAlias
+    }
+
+    @Implementation
+    fun getKeystoreAlias(): String = alias
+}
 
 /**
  * Software-backed stand-in for the AndroidKeyStore provider, used only by JVM (Robolectric) tests.
@@ -90,55 +147,9 @@ object TestAndroidKeyStore {
 
         override fun engineGenerateKey(): SecretKey {
             val key = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
-            val alias = (spec as? KeyGenParameterSpec)?.keystoreAlias ?: "jh_gateway_master_key"
+            val alias = (spec as? KeyGenParameterSpec)?.getKeystoreAlias() ?: "jh_gateway_master_key"
             entries[alias] = KeyStore.SecretKeyEntry(key)
             return key
         }
-    }
-
-    /**
-     * Robolectric shadows for KeyGenParameterSpec.Builder / KeyGenParameterSpec.
-     * Robolectric does not ship android.security.keystore, so the app's
-     * KeyGenParameterSpec.Builder(...) chain cannot run against android-all
-     * stubs (every method throws "not mocked"). These shadows let the software
-     * KeyGeneratorSpi read the keystoreAlias from the spec so providerStore and
-     * gatewaySecurity can each persist their own master key alias.
-     */
-    @Implements(android.security.keystore.KeyGenParameterSpec.Builder::class)
-    class ShadowKeyGenParameterSpecBuilder {
-        private var alias: String = ""
-
-        @Implementation
-        fun __constructor__(keystoreAlias: String, purposes: Int) {
-            alias = keystoreAlias
-        }
-
-        @Implementation
-        fun setBlockModes(vararg blockModes: String): android.security.keystore.KeyGenParameterSpec.Builder {
-            return this
-        }
-
-        @Implementation
-        fun setEncryptionPaddings(vararg paddings: String): android.security.keystore.KeyGenParameterSpec.Builder {
-            return this
-        }
-
-        @Implementation
-        fun build(): android.security.keystore.KeyGenParameterSpec {
-            return android.security.keystore.KeyGenParameterSpec(alias, 1)
-        }
-    }
-
-    @Implements(android.security.keystore.KeyGenParameterSpec::class)
-    class ShadowKeyGenParameterSpec {
-        private var alias: String = ""
-
-        @Implementation
-        fun __constructor__(keyAlias: String, purposes: Int) {
-            alias = keyAlias
-        }
-
-        @Implementation
-        fun getKeystoreAlias(): String = alias
     }
 }

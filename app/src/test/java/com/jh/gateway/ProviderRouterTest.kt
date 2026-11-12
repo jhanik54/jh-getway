@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config
 import java.io.ByteArrayOutputStream
 
 @RunWith(RobolectricTestRunner::class)
-@Config(shadows = [ShadowKeyGenParameterSpecBuilder::class])
+@Config(shadows = [ShadowKeyGenParameterSpecBuilder::class.java])
 class ProviderRouterTest {
     private val context: Context = RuntimeEnvironment.getApplication()
     private lateinit var providerA: MockWebServer
