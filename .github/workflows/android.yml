@@ -78,7 +78,7 @@ jobs:
       - name: Render resolved dependency tree
         run: |
           gradle app:dependencies --configuration releaseRuntimeClasspath > dependency-tree.txt
-          gradle app:dependencies --configuration testDebugUnitTestRuntimeClasspath > dependency-tree-test.txt
+          gradle app:dependencies --configuration debugUnitTestRuntimeClasspath > dependency-tree-test.txt
       - name: Upload dependency tree
         uses: actions/upload-artifact@v4
         with:

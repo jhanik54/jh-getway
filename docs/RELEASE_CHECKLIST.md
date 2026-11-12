@@ -59,7 +59,7 @@ When a device and Gradle verification become available:
 
 ## 6. Dependency / license review
 
-- [ ] Download the CI `dependency-tree` artifact (rendered on every push: full `releaseRuntimeClasspath` and `testDebugUnitTestRuntimeClasspath`)
+- [ ] Download the CI `dependency-tree` artifact (rendered on every push: full `releaseRuntimeClasspath` and `debugUnitTestRuntimeClasspath`)
 - [ ] Every resolved entry maps to a verified row in `THIRD_PARTY_NOTICES.md`, or the entry is added with its declared license, or the dependency is dropped
 - [ ] No `needs review` row remains unresolved at release time; unknown/conflicting terms go to manual legal review
 - [ ] Test-only dependencies never ship in the APK; if that ever changes, re-review them
