@@ -4,7 +4,7 @@
 
 A local Android AI gateway that sits between your apps and multiple OpenAI-compatible AI providers: one endpoint on your device, multiple keys, automatic fallback, and a full monitoring story.
 
-> অবস্থা / Status: in active development. `main` is built and unit-tested in CI on every push. The on-device matrix (Android 8–15, Poco/Xiaomi) is **not yet executed** — see [docs/DEVICE_MATRIX.md](docs/DEVICE_MATRIX.md).
+> অবস্থা / Status: in active development. `main` is built and unit-tested in CI on every push. The latest published release is **v35.0.0** (versionCode 35). The on-device matrix (Android 8–15, Poco/Xiaomi) is **not yet executed** — see [docs/DEVICE_MATRIX.md](docs/DEVICE_MATRIX.md).
 
 ## বৈশিষ্ট্য (Features)
 
