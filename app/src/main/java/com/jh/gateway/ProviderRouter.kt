@@ -33,7 +33,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             when {
                 last.status in 200..299 -> {
                     health?.recordSuccess(provider, System.currentTimeMillis() - started)
-                    if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L) }
+                    if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L); pruneStickyRoutes() }
                     return last.copy(provider = provider.name)
                 }
                 last.status == 401 || last.status == 403 -> store.disable(provider)
@@ -74,7 +74,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
                             if (translated != null) { output.write(translated.toByteArray()); output.flush() }
                         }
                     } }
-                    if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L) }
+                    if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L); pruneStickyRoutes() }
                     health?.recordSuccess(provider, System.currentTimeMillis() - started)
                     return ForwardResult(status, "", provider.name)
                 } catch (cancelled: java.io.IOException) {
@@ -114,7 +114,6 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             if (saved != null && saved.expiresAt > System.currentTimeMillis()) sorted.firstOrNull { it.id == saved.providerId }?.let { selected -> return listOf(selected) + sorted.filterNot { it.id == selected.id } }
             else sticky.remove(key)
         }
-        pruneStickyRoutes()
         if (sorted.size < 2) return sorted
         val strategy = settings.routingStrategy.uppercase()
         val bestTier = chain[sorted.first().id]?.second ?: 0
@@ -135,9 +134,13 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
     }
 
     /**
-     * Drops expired sticky routes. Without this the map grows with every distinct
-     * conversation id for the lifetime of the process. Pruning is amortised: it only
-     * runs every PRUNE_INTERVAL requests so it never dominates request latency.
+     * Keeps the sticky-route map bounded. Without this it grows with every distinct
+     * conversation id for the lifetime of the process.
+     *
+     * Called right AFTER a route is stored, so the bound holds immediately. Pruning is
+     * amortised (every PRUNE_INTERVAL requests) so it never dominates request latency,
+     * and the trim is by count rather than only by expiry, so the bound holds even
+     * when every route is still fresh.
      */
     private fun pruneStickyRoutes() {
         if (sticky.size <= MAX_STICKY_ROUTES) { pruneCounter.set(0); return }
