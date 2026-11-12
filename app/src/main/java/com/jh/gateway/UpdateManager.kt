@@ -32,11 +32,22 @@ class UpdateManager(private val context: Context) {
                 check(connection.responseCode in 200..299) { "GitHub returned HTTP ${connection.responseCode}" }
                 val release = JSONObject(connection.inputStream.bufferedReader().use { it.readText() }); connection.disconnect()
                 val assets = release.optJSONArray("assets") ?: error("Release has no assets")
-                val asset = (0 until assets.length()).asSequence().map { assets.getJSONObject(it) }.firstOrNull { it.optString("name").equals("app-debug.apk", true) || it.optString("name").endsWith(".apk") } ?: error("No APK asset found")
-                val metadataAsset = (0 until assets.length()).asSequence().map { assets.getJSONObject(it) }.firstOrNull { it.optString("name") == "latest.json" }
+                val assetList = (0 until assets.length()).asSequence().map { assets.getJSONObject(it) }.toList()
+                // Prefer the release APK; fall back to the debug APK. latest.json is
+                // authoritative when published, but the fallback must still pick a
+                // release asset before a debug one.
+                val asset = assetList.firstOrNull { it.optString("name").equals("app-release.apk", true) }
+                    ?: assetList.firstOrNull { it.optString("name").endsWith(".apk", true) }
+                    ?: error("No APK asset found")
+                val metadataAsset = assetList.firstOrNull { it.optString("name") == "latest.json" }
                 val metadata = metadataAsset?.let { readJson(it.getString("browser_download_url")) }
                 val versionName = metadata?.optString("versionName").orEmpty().ifBlank { release.optString("tag_name", "v0.0.0").removePrefix("v") }
-                val versionCode = metadata?.optInt("versionCode", 0)?.takeIf { it > 0 } ?: versionName.substringBefore('.').toIntOrNull() ?: 0
+                // versionCode comes from latest.json when published. Otherwise fall back to the
+                // release tag ("v35.0.0" -> 35), then to a leading integer in the version name.
+                // A dotted name like "0.6.0" must NOT be read as versionCode 0.
+                val tagVersion = release.optString("tag_name", "").removePrefix("v").substringBefore('.').toIntOrNull()?.takeIf { it > 0 }
+                val nameVersion = versionName.substringBefore('.').toIntOrNull()?.takeIf { it > 0 }
+                val versionCode = metadata?.optInt("versionCode", 0)?.takeIf { it > 0 } ?: tagVersion ?: nameVersion ?: 0
                 val apkUrl = metadata?.optString("apkUrl").orEmpty().ifBlank { asset.getString("browser_download_url") }
                 val found = if (versionCode > BuildConfig.VERSION_CODE) AvailableUpdate(versionCode, versionName, release.optString("body").ifBlank { "Performance improvements and bug fixes." }, apkUrl, release.optString("html_url"), metadata?.optString("sha256")?.ifBlank { null }) else null
                 if (found == null) clearCachedUpdate() else cacheUpdate(found)
@@ -69,7 +80,10 @@ class UpdateManager(private val context: Context) {
         Thread {
             val result = runCatching {
                 val folder = File(context.filesDir, "updates").apply { mkdirs() }
-                val apk = File(folder, "jh-getway-${update.versionName}.apk")
+                // Name the file by versionCode (not versionName): existingApk() compares
+                // the number in the name against BuildConfig.VERSION_CODE, and a dotted
+                // versionName ("0.6.0") would parse as 0 and be discarded as stale.
+                val apk = File(folder, "jh-getway-${update.versionCode}.apk")
                 val partial = File(folder, "${apk.name}.part")
                 apk.delete(); partial.delete()
                 val connection = (URL(update.apkUrl).openConnection() as HttpURLConnection).apply { connectTimeout = 15_000; readTimeout = 120_000; instanceFollowRedirects = true; setRequestProperty("User-Agent", "JH-GetWay/${BuildConfig.VERSION_NAME}"); setRequestProperty("Accept", "application/octet-stream") }
@@ -150,7 +164,9 @@ class UpdateManager(private val context: Context) {
         return folder.listFiles()
             ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) && it.length() > 1_000_000 }
             ?.filter { file ->
-                val version = Regex("jh-getway-(\\d+)(?:\\.\\d+){0,2}\\.apk").find(file.name)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                // The file name carries the versionCode (see download()): keep it only if it
+                // is newer than what is installed, otherwise delete it as stale.
+                val version = Regex("jh-getway-(\\d+)\\.apk").find(file.name)?.groupValues?.getOrNull(1)?.toIntOrNull()
                 if (version == null || version <= BuildConfig.VERSION_CODE) { file.delete(); false } else true
             }
             ?.maxByOrNull { it.lastModified() }

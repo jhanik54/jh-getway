@@ -3,6 +3,7 @@ package com.jh.gateway
 import android.content.Context
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -61,5 +62,28 @@ class UpdateManagerTest {
             put("sha256", "")
         }.toString()).commit()
         assertNull(UpdateManager(context).cachedUpdate()!!.sha256)
+    }
+
+    /** The downloaded APK file name carries the versionCode, so existingApk() can compare it. */
+    @Test
+    fun downloadedApkFileNameCarriesVersionCodeNotVersionName() {
+        val newer = BuildConfig.VERSION_CODE + 1
+        val file = java.io.File(context.filesDir, "updates/jh-getway-$newer.apk")
+        file.parentFile?.mkdirs()
+        file.writeBytes(ByteArray(1_100_000))
+        val found = UpdateManager(context).existingApk()
+        assertNotNull(found)
+        assertEquals("jh-getway-$newer.apk", found!!.name)
+        file.delete()
+    }
+
+    /** A stale APK (versionCode <= installed) must be deleted, not offered for install. */
+    @Test
+    fun staleDownloadedApkIsDeletedInsteadOfOffered() {
+        val file = java.io.File(context.filesDir, "updates/jh-getway-${BuildConfig.VERSION_CODE}.apk")
+        file.parentFile?.mkdirs()
+        file.writeBytes(ByteArray(1_100_000))
+        assertNull(UpdateManager(context).existingApk())
+        assertFalse(file.exists())
     }
 }

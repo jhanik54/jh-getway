@@ -63,17 +63,20 @@ jobs:
       - name: Verify debug APK
         run: bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk
       - name: Build release APK
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           JH_SIGNING_PASSWORD: ${{ secrets.JH_SIGNING_PASSWORD }}
         run: |
           if [ -z "$JH_SIGNING_PASSWORD" ]; then
-            echo "::error::JH_SIGNING_PASSWORD secret is required for release builds; refusing to build an unsigned release"
-            exit 1
+            if [ "${{ github.ref }}" = "refs/tags/${GITHUB_REF_NAME}" ] || [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              echo "::error::JH_SIGNING_PASSWORD secret is required for release builds; refusing to publish an unsigned release"
+              exit 1
+            fi
+            echo "::warning::JH_SIGNING_PASSWORD secret not set; skipping the signed release build (fork/PR build)"
+            exit 0
           fi
           gradle assembleRelease
       - name: Verify release APK
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: hashFiles('app/build/outputs/apk/release/app-release.apk') != ''
         run: bash scripts/verify-apk.sh app/build/outputs/apk/release/app-release.apk
       - name: Render resolved dependency tree
         run: |
@@ -103,11 +106,20 @@ jobs:
         run: |
           version_code=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts | head -1)
           version_name=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
-          sha256=$(sha256sum app/build/outputs/apk/debug/app-debug.apk | awk '{print $1}')
-          apk_url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-debug.apk"
+          # The updater installs the release APK: it is signed with the same stable
+          # certificate as the debug APK, so it installs over an existing install.
+          apk=app/build/outputs/apk/release/app-release.apk
+          apk_name=app-release.apk
+          if [ ! -f "$apk" ]; then
+            apk=app/build/outputs/apk/debug/app-debug.apk
+            apk_name=app-debug.apk
+          fi
+          sha256=$(sha256sum "$apk" | awk '{print $1}')
+          apk_url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$apk_name"
           cat > latest.json <<EOF
-          {"packageName":"com.jh.gateway","versionCode":$version_code,"versionName":"$version_name","apkName":"app-debug.apk","apkUrl":"$apk_url","sha256":"$sha256"}
+          {"packageName":"com.jh.gateway","versionCode":$version_code,"versionName":"$version_name","apkName":"$apk_name","apkUrl":"$apk_url","sha256":"$sha256"}
           EOF
+          cat latest.json
       - name: Publish release APK
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -117,37 +129,24 @@ jobs:
             app/build/outputs/apk/release/app-release.apk
             latest.json
           body: |
-            - Stable signing certificate for future no-uninstall updates
-            - This tag ships both the debug APK (used by the in-app updater) and a verified release APK; both are signed with the same stable certificate and checked for package, version, signature and checksum before publishing
-            - In-app updater now re-verifies the downloaded APK's package name, version and signing certificate before install
-            - Cold-launch branded splash (reduced-motion aware)
-            - Dedicated in-app update screen
-            - Android Download Manager download with notification
-            - Release notes and GitHub release fallback
-            - Install update action with Android permission guidance
+            **v0.6.0 — Release hardening**
+
+            New in this release:
+            - Branded cold-launch splash (JH GetWay rises, settles at center, then JH Soft Corporation); honors reduced-motion and runs once per cold launch
+            - In-app updater now verifies the downloaded APK's package name, versionCode and signing certificate before offering the install, and re-verifies at install time
+            - Release build published alongside the debug APK, both signed with the same stable certificate so updates install without uninstalling
+            - CI verifies every APK (package, version, signature, SHA-256) before publishing and fails the release on mismatch
+            - Signing password moved to a GitHub Secret; no fallback password anywhere in the build
+            - Resolved dependency trees published as a CI artifact for the license audit
+
+            Previous highlights:
+            - Dedicated in-app update screen with Android Download Manager download and install guidance
             - Persistent Best/Good/Basic routing chain with reorder controls
             - Privacy-safe request logs and usage summary dashboard
             - Password-protected backup export/import with file picker
-            - App-owned update download with visible progress and later install
-            - Help and setup guide for tools, battery settings, and troubleshooting
             - Optional app lock with device PIN/biometrics and screenshot protection
-            - Dynamic version shown in the app, health endpoint, and Home address
-            - Official JH GetWay launcher logo supplied by the owner
-            - Persistent downloaded update recovery after closing the update screen
-            - Stale APK cleanup and reliable forced update check
-            - Persistent pending-update queue with retry after closing the app
-            - Persistent Light, Dark, and System appearance modes
-            - Updater retry state and provider cooldown on transient server failures
             - Anthropic/Responses streaming bridges, tool-call translation, sticky routing, round-robin, and token usage
-            - APK validation and Android package-installer update flow
-            - Runtime state synchronization, provider cleanup, URL validation, and JSON body limits
-            - Retry-After aware provider cooldowns and visible LAN HTTP warning
-            - Provider edit, test, enable/disable, and secure delete cleanup
-            - Model aliases and provider-specific upstream model mapping
-            - Priority/Round Robin routing selector and TTL-based sticky sessions
+            - Retry-After aware provider cooldowns, provider health state and rate-limited failure notifications
             - LAN IP allowlist, per-IP rate limiting, and protocol adapter fixture tests
-            - Compile-fix follow-up for the security/test batch
-            - Android-runtime protocol fixture tests prepared for device execution
-            - Configurable concurrent request limit and upstream stream cleanup
-            - Classified provider failures with bounded cooldown and safe invalid-request handling
-            - Provider health state and rate-limited failure notifications
+            - Model aliases and provider-specific upstream model mapping
+            - Light, Dark, and System appearance modes; English/Bangla interface
