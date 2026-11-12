@@ -12,6 +12,7 @@ data class ForwardResult(val status: Int, val body: String, val provider: String
 
 class ProviderRouter(private val store: ProviderStore, private val chainStore: ChainStore, private val settings: GatewaySettings, private val health: ProviderHealthStore? = null) {
     private val roundRobin = ConcurrentHashMap<String, AtomicInteger>()
+    private val pruneCounter = AtomicInteger(0)
     private data class StickyRoute(val providerId: String, val expiresAt: Long)
     private val sticky = ConcurrentHashMap<String, StickyRoute>()
     fun forward(body: String): ForwardResult {
@@ -101,10 +102,12 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
     }
 
     private fun eligible(requestedModel: String, body: String): List<StoredProvider> {
-        val providers = store.list().filter { provider ->
+        // Read the provider list once: list() parses JSON on every call.
+        val allProviders = store.list()
+        val providers = allProviders.filter { provider ->
         provider.enabled && !provider.isCoolingDown && (requestedModel.isBlank() || requestedModel == "auto" || provider.model == "auto" || provider.model == requestedModel || requestedModel in provider.aliases)
         }
-        val chain = chainStore.load(store.list()).filter { it.enabled }.withIndex().associate { it.value.id to (it.index to it.value.tier.ordinal) }
+        val chain = chainStore.load(allProviders).filter { it.enabled }.withIndex().associate { it.value.id to (it.index to it.value.tier.ordinal) }
         val sorted = providers.sortedWith(compareBy({ chain[it.id]?.second ?: 0 }, { chain[it.id]?.first ?: Int.MAX_VALUE }, { it.priority }))
         if (settings.stickySession) sessionKey(body)?.let { key ->
             val saved = sticky[key]
@@ -133,10 +136,12 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
 
     /**
      * Drops expired sticky routes. Without this the map grows with every distinct
-     * conversation id for the lifetime of the process.
+     * conversation id for the lifetime of the process. Pruning is amortised: it only
+     * runs every PRUNE_INTERVAL requests so it never dominates request latency.
      */
     private fun pruneStickyRoutes() {
-        if (sticky.size <= MAX_STICKY_ROUTES) return
+        if (sticky.size <= MAX_STICKY_ROUTES) { pruneCounter.set(0); return }
+        if (pruneCounter.incrementAndGet() % PRUNE_INTERVAL != 0L) return
         val now = System.currentTimeMillis()
         sticky.entries.removeAll { it.value.expiresAt <= now }
         if (sticky.size > MAX_STICKY_ROUTES) {
@@ -152,7 +157,10 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         return eligible(safeModel, body)
     }
 
-    companion object { private const val MAX_STICKY_ROUTES = 500 }
+    companion object {
+        private const val MAX_STICKY_ROUTES = 500
+        private const val PRUNE_INTERVAL = 50L
+    }
 
     private fun sessionKey(body: String): String? = runCatching {
         val input = JSONObject(body)

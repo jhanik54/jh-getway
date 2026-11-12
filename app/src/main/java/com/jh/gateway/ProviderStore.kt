@@ -37,6 +37,7 @@ class ProviderStore(context: Context) {
     private val appContext = context.applicationContext
     private val prefs: SharedPreferences = context.getSharedPreferences("gateway_providers", Context.MODE_PRIVATE)
     private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    private val keyCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     init { ensureMasterKey() }
 
@@ -62,9 +63,24 @@ class ProviderStore(context: Context) {
         val provider = StoredProvider(id, name.trim(), normalizedUrl, model.trim().ifBlank { "auto" }, list().size + 1, protocol, aliases = aliases.map(String::trim).filter(String::isNotBlank).distinct())
         save(list() + provider)
         prefs.edit().putString(keyName(id), encrypt(normalizedKey)).apply()
+        keyCache[id] = normalizedKey
     }
 
-    fun apiKey(provider: StoredProvider): String? = prefs.getString(keyName(provider.id), null)?.let(::decrypt)
+    /**
+     * Decrypted API key for [provider], or null when it is missing or unreadable.
+     *
+     * The plaintext is cached in memory: decryption touches the AndroidKeyStore on
+     * every call, which is far too slow for the request path. The cache is dropped
+     * whenever the key for that provider changes or the provider is removed.
+     */
+    fun apiKey(provider: StoredProvider): String? {
+        val cached = keyCache[provider.id]
+        if (cached != null) return cached
+        val stored = prefs.getString(keyName(provider.id), null) ?: return null
+        val decrypted = decrypt(stored) ?: return null
+        keyCache[provider.id] = decrypted
+        return decrypted
+    }
 
     /**
      * True when a stored API key can no longer be decrypted (the AndroidKeyStore master key
@@ -105,12 +121,14 @@ class ProviderStore(context: Context) {
         val current = list().firstOrNull { it.id == id } ?: error("Provider not found")
         save(list().map { if (it.id == id) current.copy(name = name.trim(), baseUrl = normalizedUrl, model = model.trim().ifBlank { "auto" }, protocol = protocol, aliases = aliases.map(String::trim).filter(String::isNotBlank).distinct()) else it })
         prefs.edit().putString(keyName(id), encrypt(normalizedKey)).apply()
+        keyCache[id] = normalizedKey
     }
 
     @Synchronized
     fun remove(id: String) {
         save(list().filterNot { it.id == id })
         prefs.edit().remove(keyName(id)).apply()
+        keyCache.remove(id)
         try {
             appContext.getSharedPreferences("provider_health", Context.MODE_PRIVATE).edit().remove("health_$id").apply()
             appContext.getSharedPreferences("gateway_stats", Context.MODE_PRIVATE).edit().remove("health_$id").apply()
@@ -135,6 +153,7 @@ class ProviderStore(context: Context) {
             val staleKeys = prefs.all.keys.filter { it.startsWith("key_") }
             prefs.edit().remove(PROVIDERS).apply()
             staleKeys.forEach { prefs.edit().remove(it).apply() }
+            keyCache.clear()
         }
         for (index in 0 until incoming.length()) {
             val item = incoming.getJSONObject(index)

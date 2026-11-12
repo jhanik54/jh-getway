@@ -125,7 +125,8 @@ class RoutingFallbackTest {
         // Enqueue enough responses so no request ever waits for a socket timeout.
         repeat(700) { openAiServer.enqueueOk() }
         val instance = router(store)
-        // Distinct conversation ids create distinct sticky routes.
+        // Distinct conversation ids create distinct sticky routes. The model is a
+        // fixed alias so every request is served by the same provider.
         repeat(600) { index ->
             val body = """{"model":"auto","user":"session-$index","messages":[{"role":"user","content":"ping"}]}"""
             instance.forward(body)
@@ -135,7 +136,7 @@ class RoutingFallbackTest {
         field.isAccessible = true
         @Suppress("UNCHECKED_CAST")
         val sticky = field.get(instance) as Map<String, Any>
-        assertTrue("sticky routes grew to ${sticky.size}", sticky.size <= 600)
+        assertTrue("sticky routes grew to ${sticky.size}", sticky.size <= 500)
         assertNotEquals(0, sticky.size)
     }
 }
