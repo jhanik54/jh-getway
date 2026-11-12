@@ -142,7 +142,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
      * and the trim is by count rather than only by expiry, so the bound holds even
      * when every route is still fresh.
      */
-    private fun pruneStickyRoutes() {
+    internal fun pruneStickyRoutes() {
         if (sticky.size <= MAX_STICKY_ROUTES) { pruneCounter.set(0); return }
         if (pruneCounter.incrementAndGet() % PRUNE_INTERVAL != 0L) return
         val now = System.currentTimeMillis()
