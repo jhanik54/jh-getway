@@ -41,8 +41,8 @@ class ProviderRouterTest {
 
     @After
     fun tearDown() {
-        providerA.shutdown()
-        providerB.shutdown()
+        if (::providerA.isInitialized) providerA.shutdown()
+        if (::providerB.isInitialized) providerB.shutdown()
     }
 
     private fun store(): ProviderStore {
