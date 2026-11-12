@@ -18,6 +18,8 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.KeyGenerator
 import javax.crypto.KeyGeneratorSpi
 import javax.crypto.SecretKey
+import org.robolectric.annotation.Implements
+import org.robolectric.annotation.Implementation
 
 /**
  * Software-backed stand-in for the AndroidKeyStore provider, used only by JVM (Robolectric) tests.
@@ -92,5 +94,51 @@ object TestAndroidKeyStore {
             entries[alias] = KeyStore.SecretKeyEntry(key)
             return key
         }
+    }
+
+    /**
+     * Robolectric shadows for KeyGenParameterSpec.Builder / KeyGenParameterSpec.
+     * Robolectric does not ship android.security.keystore, so the app's
+     * KeyGenParameterSpec.Builder(...) chain cannot run against android-all
+     * stubs (every method throws "not mocked"). These shadows let the software
+     * KeyGeneratorSpi read the keystoreAlias from the spec so providerStore and
+     * gatewaySecurity can each persist their own master key alias.
+     */
+    @Implements(android.security.keystore.KeyGenParameterSpec.Builder::class)
+    class ShadowKeyGenParameterSpecBuilder {
+        private var alias: String = ""
+
+        @Implementation
+        fun __constructor__(keystoreAlias: String, purposes: Int) {
+            alias = keystoreAlias
+        }
+
+        @Implementation
+        fun setBlockModes(vararg blockModes: String): android.security.keystore.KeyGenParameterSpec.Builder {
+            return this
+        }
+
+        @Implementation
+        fun setEncryptionPaddings(vararg paddings: String): android.security.keystore.KeyGenParameterSpec.Builder {
+            return this
+        }
+
+        @Implementation
+        fun build(): android.security.keystore.KeyGenParameterSpec {
+            return android.security.keystore.KeyGenParameterSpec(alias, 1)
+        }
+    }
+
+    @Implements(android.security.keystore.KeyGenParameterSpec::class)
+    class ShadowKeyGenParameterSpec {
+        private var alias: String = ""
+
+        @Implementation
+        fun __constructor__(keyAlias: String, purposes: Int) {
+            alias = keyAlias
+        }
+
+        @Implementation
+        fun getKeystoreAlias(): String = alias
     }
 }
