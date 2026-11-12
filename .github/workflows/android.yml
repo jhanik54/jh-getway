@@ -43,6 +43,15 @@ jobs:
           gradle-version: '8.10'
       - name: Run unit tests
         run: gradle testDebugUnitTest
+      - name: Upload unit test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            app/build/reports/tests/testDebugUnitTest
+            app/build/test-results/testDebugUnitTest
+          retention-days: 7
       - name: Build debug APK
         env:
           JH_SIGNING_PASSWORD: jh-getway-stable-signing-v1

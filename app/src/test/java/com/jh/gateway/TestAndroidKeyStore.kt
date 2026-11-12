@@ -31,12 +31,17 @@ object TestAndroidKeyStore {
 
     fun install() {
         Security.removeProvider(PROVIDER_NAME)
-        Security.addProvider(object : Provider(PROVIDER_NAME, 1.0, "In-memory stand-in for tests") {
+        Security.insertProviderAt(object : Provider(PROVIDER_NAME, 1.0, "In-memory stand-in for tests") {
             init {
                 put("KeyStore.AndroidKeyStore", SoftwareKeyStoreSpi::class.java.name)
                 put("KeyGenerator.AES", SoftwareKeyGeneratorSpi::class.java.name)
             }
-        })
+        }, 1)
+        // Self-check: surface exactly why the JCA lookup fails under Robolectric instead of a bare NoSuchAlgorithmException.
+        runCatching { KeyStore.getInstance(PROVIDER_NAME) }.onFailure { error ->
+            val providers = Security.getProviders().joinToString(", ") { it.name }
+            throw IllegalStateException("TestAndroidKeyStore self-check failed (${error.javaClass.simpleName}: ${error.message}). Providers: [$providers]", error)
+        }
     }
 
     private class SoftwareKeyStoreSpi : KeyStoreSpi() {
