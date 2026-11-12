@@ -74,4 +74,25 @@ class GatewaySecurityTest {
         // The blocklist short-circuits before the key is even checked.
         assertFalse(security.isAuthorized("Bearer ${security.gatewayKey()}", ip))
     }
+
+    @Test
+    fun gatewayKeyIsNeverEmpty() {
+        val security = GatewaySecurity(context)
+        assertTrue("gateway key must never be empty", security.gatewayKey().isNotBlank())
+        assertTrue(security.gatewayKey().startsWith("gw-"))
+    }
+
+    @Test
+    fun unreadableStoredKeyIsRegeneratedInsteadOfLeavingTheGatewayLocked() {
+        val security = GatewaySecurity(context)
+        val original = security.gatewayKey()
+        assertTrue(original.isNotBlank())
+        // Simulate an invalidated AndroidKeyStore key: the stored ciphertext can no
+        // longer be decrypted.
+        context.getSharedPreferences("gateway_security", Context.MODE_PRIVATE)
+            .edit().putString("gateway_key", "garbled-ciphertext").commit()
+        val recovered = GatewaySecurity(context)
+        assertTrue("a fresh key must be issued", recovered.gatewayKey().isNotBlank())
+        assertTrue(recovered.gatewayKey().startsWith("gw-"))
+    }
 }

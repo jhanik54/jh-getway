@@ -155,6 +155,15 @@ object ProtocolAdapter {
     fun toOpenAi(body: String, protocol: ClientProtocol): String {
         if (protocol == ClientProtocol.OPENAI) return body
         val input = JSONObject(body)
+        // Reject fields the client protocol does not support BEFORE translating, so the
+        // field is never silently dropped on the way to the provider.
+        val unsupported = when (protocol) {
+            ClientProtocol.ANTHROPIC -> setOf("frequency_penalty", "presence_penalty", "seed", "logprobs", "top_logprobs", "n", "stream_options", "response_format", "parallel_tool_calls")
+            ClientProtocol.RESPONSES -> setOf("logprobs", "top_logprobs", "n", "response_format")
+            ClientProtocol.OPENAI -> emptySet()
+        }
+        input.keys().forEach { key -> if (key in unsupported) throw UnsupportedFieldException(key) }
+        input.optInt("n", 1).let { if (it != 1) throw UnsupportedFieldException("n") }
         val messages = JSONArray()
         input.optString("system").takeIf { it.isNotBlank() }?.let { messages.put(JSONObject().put("role", "system").put("content", it)) }
         if (protocol == ClientProtocol.ANTHROPIC) {

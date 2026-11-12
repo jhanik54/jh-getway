@@ -270,7 +270,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     }
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 }, onViewChain = { showChainDialog = true }, onViewLogs = { showMonitoringDialog = true })
-                1 -> ProvidersScreen(Modifier.padding(padding), keys, providerMessage, onInfo = { key -> detailProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onAdd = { showAddDialog = true }, onToggle = { key, enabled -> providerStore.setEnabled(key.id, enabled); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onEdit = { key -> editingProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onDelete = { key -> providerStore.remove(key.id); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onTest = { key -> val provider = providerStore.list().firstOrNull { it.id == key.id }; val secret = provider?.let { providerStore.apiKey(it) }; if (provider == null || secret == null) providerMessage = credentialUnavailable else { providerMessage = "Testing ${key.name}…"; ProviderModelFetcher.fetch(provider.baseUrl, secret, provider.protocol) { result -> (context as? ComponentActivity)?.runOnUiThread { providerMessage = result.fold({ "${key.name}: connection OK (${it.size} models)" }, { "${key.name}: ${it.message ?: "test failed"}" }) } } } })
+                1 -> ProvidersScreen(Modifier.padding(padding), keys, providerMessage, unreadableKeys = providerStore.hasUnreadableKeys(), onInfo = { key -> detailProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onAdd = { showAddDialog = true }, onToggle = { key, enabled -> providerStore.setEnabled(key.id, enabled); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onEdit = { key -> editingProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onDelete = { key -> providerStore.remove(key.id); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onTest = { key -> val provider = providerStore.list().firstOrNull { it.id == key.id }; val secret = provider?.let { providerStore.apiKey(it) }; if (provider == null || secret == null) providerMessage = credentialUnavailable else { providerMessage = "Testing ${key.name}…"; ProviderModelFetcher.fetch(provider.baseUrl, secret, provider.protocol) { result -> (context as? ComponentActivity)?.runOnUiThread { providerMessage = result.fold({ "${key.name}: connection OK (${it.size} models)" }, { "${key.name}: ${it.message ?: "test failed"}" }) } } } })
                 else -> MoreScreen(Modifier.padding(padding), updateMessage, onSettings = { showSettings = true }, onChain = { showChainDialog = true }, onMonitoring = { showMonitoringDialog = true }, onBackup = { showBackupDialog = true }, onHelp = { showHelpDialog = true }, onUpdate = { showUpdateDialog = true })
             }
         }
@@ -290,7 +290,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         detailProvider?.let { provider ->
             ProviderDetailDialog(provider, providerHealth.get(provider.id), providerStore.apiKey(provider)?.let { "${it.take(4)}••••••${it.takeLast(4)}" } ?: "••••••••", GatewayStats(context), onDismiss = { detailProvider = null })
         }
-        if (showSettings) SettingsDialog(gatewaySettings, onSecurityChanged = { (context as? MainActivity)?.applySecurityFromUi() }, onAppearanceChanged = { theme = gatewaySettings.theme }, onDismiss = { showSettings = false })
+        if (showSettings) SettingsDialog(gatewaySettings, onSecurityChanged = { (context as? MainActivity)?.applySecurityFromUi() }, onAppearanceChanged = { theme = gatewaySettings.theme }, onServerSettingsChanged = { restartGatewayIfRunning(context, gatewayState) }, onDismiss = { showSettings = false })
         if (showUpdateDialog) UpdateDialog(onDismiss = { showUpdateDialog = false })
         if (showChainDialog) ChainDialog(providerStore, onDismiss = { showChainDialog = false })
         if (showMonitoringDialog) MonitoringDialog(GatewayStats(context), onDismiss = { showMonitoringDialog = false })
@@ -299,6 +299,17 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         if (!splashDone) SplashOverlay(darkTheme = darkTheme, onDone = { splashDone = true })
         }
     }
+}
+
+/**
+ * Restarts the gateway so changed server settings (port, Wi-Fi mode, concurrency limit)
+ * take effect. The running server keeps its own copy of the settings, so without a
+ * restart the new values would be ignored until the service was stopped manually.
+ */
+private fun restartGatewayIfRunning(context: android.content.Context, gatewayState: GatewayStateStore) {
+    if (gatewayState.state != GatewayRunState.RUNNING && gatewayState.state != GatewayRunState.STARTING) return
+    val intent = Intent(context, GatewayService::class.java).apply { action = GatewayService.ACTION_RESTART }
+    runCatching { ContextCompat.startForegroundService(context, intent) }
 }
 
 private fun MainActivity.applySecurityFromUi() {
@@ -488,7 +499,7 @@ private fun RouteCard(strategy: String, chainCount: Int) {
 }
 
 @Composable
-private fun ProvidersScreen(modifier: Modifier, keys: List<ProviderKey>, message: String, onInfo: (ProviderKey) -> Unit, onAdd: () -> Unit, onToggle: (ProviderKey, Boolean) -> Unit, onEdit: (ProviderKey) -> Unit, onDelete: (ProviderKey) -> Unit, onTest: (ProviderKey) -> Unit) {
+private fun ProvidersScreen(modifier: Modifier, keys: List<ProviderKey>, message: String, unreadableKeys: Boolean = false, onInfo: (ProviderKey) -> Unit, onAdd: () -> Unit, onToggle: (ProviderKey, Boolean) -> Unit, onEdit: (ProviderKey) -> Unit, onDelete: (ProviderKey) -> Unit, onTest: (ProviderKey) -> Unit) {
     var filter by remember { mutableIntStateOf(0) }
     val activeCount = keys.count { it.status == KeyStatus.ACTIVE }
     val cooldownCount = keys.count { it.status == KeyStatus.COOLDOWN }
@@ -503,6 +514,17 @@ private fun ProvidersScreen(modifier: Modifier, keys: List<ProviderKey>, message
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_providers_87b7c0), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text(stringResource(R.string.str_manage_your_ai_keys_and_models_71313e), color = Muted) }; Button(onClick = onAdd) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.str_add_key_49e644)) } }
         if (message.isNotBlank()) Text(message, color = Muted, style = MaterialTheme.typography.bodySmall)
+        if (unreadableKeys) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B))
+            ) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(stringResource(R.string.str_keys_unreadable_title_5d3a71), fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
+                    Text(stringResource(R.string.str_keys_unreadable_body_7b91c4), style = MaterialTheme.typography.bodySmall, color = Color(0xFF92400E))
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             FilterChip(filter == 0, { filter = 0 }, label = { Text(stringResource(R.string.str_all_6a7208) + "  ${keys.size}") })
             FilterChip(filter == 1, { filter = 1 }, label = { Text(stringResource(R.string.str_active_a733b8) + "  $activeCount") })
@@ -848,7 +870,7 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> Unit, onAppearanceChanged: () -> Unit, onDismiss: () -> Unit) {
+private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> Unit, onAppearanceChanged: () -> Unit, onServerSettingsChanged: () -> Unit = {}, onDismiss: () -> Unit) {
     var wifi by remember { mutableStateOf(settings.wifiMode) }
     var boot by remember { mutableStateOf(settings.startOnBoot) }
     var appLock by remember { mutableStateOf(settings.appLock) }
@@ -889,7 +911,7 @@ private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> U
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_app_lock_a34fa2), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_require_phone_pin_or_biometric_eb3ca5), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(appLock, { appLock = it }) }
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_block_screenshots_6223b2), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_hide_app_content_from_screensh_cf2805), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(screenshotBlock, { screenshotBlock = it }) }
         }
-    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.routingStrategy = routingStrategy; settings.stickySession = stickySession; settings.ipAllowlist = ipAllowlist; maxConcurrent.toIntOrNull()?.let { settings.maxConcurrent = it }; stickyTtl.toIntOrNull()?.let { settings.stickyTtlSeconds = it }; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onDismiss() }) { Text(stringResource(R.string.str_save_efc007)) } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_cancel_77dfd2)) } })
+    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.routingStrategy = routingStrategy; settings.stickySession = stickySession; settings.ipAllowlist = ipAllowlist; maxConcurrent.toIntOrNull()?.let { settings.maxConcurrent = it }; stickyTtl.toIntOrNull()?.let { settings.stickyTtlSeconds = it }; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onServerSettingsChanged(); onDismiss() }) { Text(stringResource(R.string.str_save_efc007)) } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_cancel_77dfd2)) } })
 }
 
 @Composable

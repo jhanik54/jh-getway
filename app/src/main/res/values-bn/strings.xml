@@ -160,4 +160,6 @@
     <string name="str_all_6a7208">সব</string>
     <string name="str_jh_soft_corporation_4f2b1c">JH Soft Corporation</string>
     <string name="str_splash_logo_description_7a3e90">JH GetWay লোগো</string>
+    <string name="str_keys_unreadable_title_5d3a71">কিছু API key আবার দিতে হবে</string>
+    <string name="str_keys_unreadable_body_7b91c4">ডিভাইসের keystore রিসেট হয়েছে (যেমন স্ক্রিন লক বদলালে), তাই সংরক্ষিত key আর decrypt করা যাচ্ছে না। প্রতিটি provider খুলে তার API key আবার লিখুন।</string>
 </resources>

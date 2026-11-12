@@ -23,7 +23,16 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
     private val permitKey = AttributeKey<Boolean>("jh-gateway-request-permit")
     private val server = embeddedServer(CIO, host = if (settings.wifiMode) "0.0.0.0" else "127.0.0.1", port = settings.port) {
         routing {
+            // Liveness probe. Kept unauthenticated so a simple `curl /health` works, but it
+            // deliberately exposes nothing beyond liveness and the app version.
             get("/health") {
+                call.respondText(
+                    "{\"status\":\"ok\",\"service\":\"JH GetWay\",\"version\":\"${BuildConfig.VERSION_NAME}\",\"versionCode\":${BuildConfig.VERSION_CODE}}",
+                    ContentType.Application.Json
+                )
+            }
+            // Alias used by the docs / device matrix.
+            get("/healthz") {
                 call.respondText(
                     "{\"status\":\"ok\",\"service\":\"JH GetWay\",\"version\":\"${BuildConfig.VERSION_NAME}\",\"versionCode\":${BuildConfig.VERSION_CODE}}",
                     ContentType.Application.Json
@@ -31,13 +40,17 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
             }
             get("/v1/models") {
                 if (!call.authorized()) return@get
-                val models = ModelRegistry.modelsFor(store.list()).joinToString(",") { info -> "{\"id\":\"${escape(info.id)}\",\"object\":\"model\",\"created\":1_700_000_000,\"owned_by\":\"jh-getway\",\"capabilities\":[${info.capabilities.joinToString(",") { "\"${escape(it)}\"" }}]}" }
-                call.respondText("{\"object\":\"list\",\"data\":[$models]}", ContentType.Application.Json)
+                try {
+                    val models = ModelRegistry.modelsFor(store.list()).joinToString(",") { info -> "{\"id\":\"${escape(info.id)}\",\"object\":\"model\",\"created\":1_700_000_000,\"owned_by\":\"jh-getway\",\"capabilities\":[${info.capabilities.joinToString(",") { "\"${escape(it)}\"" }}]}" }
+                    call.respondText("{\"object\":\"list\",\"data\":[$models]}", ContentType.Application.Json)
+                } finally { call.releasePermit() }
             }
             get("/v1/gateway/logs") {
                 if (!call.authorized()) return@get
-                val data = stats.recent().joinToString(",") { "{\"time\":${it.time},\"endpoint\":\"${escape(it.endpoint)}\",\"status\":${it.status},\"provider\":\"${escape(it.provider ?: "")}\",\"latencyMs\":${it.latencyMs},\"model\":\"${escape(it.model)}\"}" }
-                call.respondText("{\"object\":\"list\",\"data\":[$data]}", ContentType.Application.Json)
+                try {
+                    val data = stats.recent().joinToString(",") { "{\"time\":${it.time},\"endpoint\":\"${escape(it.endpoint)}\",\"status\":${it.status},\"provider\":\"${escape(it.provider ?: "")}\",\"latencyMs\":${it.latencyMs},\"model\":\"${escape(it.model)}\"}" }
+                    call.respondText("{\"object\":\"list\",\"data\":[$data]}", ContentType.Application.Json)
+                } finally { call.releasePermit() }
             }
             post("/v1/gateway/simulate") {
                 if (!call.authorized()) return@post
@@ -74,7 +87,7 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
                 if (!call.authorized()) return@post
                 try {
                     val body = call.receiveValidatedBody() ?: return@post
-                    val translated = ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC)
+                    val translated = translateOrError(body, ClientProtocol.ANTHROPIC) ?: return@post
                     if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
                         call.respondOutputStream(ContentType.Text.EventStream) {
                             val started = System.currentTimeMillis()
@@ -94,7 +107,7 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
                 if (!call.authorized()) return@post
                 try {
                     val body = call.receiveValidatedBody() ?: return@post
-                    val translated = ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES)
+                    val translated = translateOrError(body, ClientProtocol.RESPONSES) ?: return@post
                     if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
                         call.respondOutputStream(ContentType.Text.EventStream) {
                             val started = System.currentTimeMillis()
@@ -140,6 +153,20 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
         if (attributes.getOrNull(permitKey) == true) { requestPermits.release(); attributes.put(permitKey, false) }
     }
 
+    /**
+     * Translates a client-protocol body into the internal OpenAI shape. Responds with a
+     * 400 and returns null when the body uses fields the endpoint does not support.
+     */
+    private suspend fun io.ktor.server.application.ApplicationCall.translateOrError(body: String, protocol: ClientProtocol): String? =
+        runCatching { ProtocolAdapter.toOpenAi(body, protocol) }.getOrElse { error ->
+            val message = when (error) {
+                is UnsupportedFieldException -> "Field '${error.field}' is not supported by the ${protocol.name.lowercase()} endpoint"
+                else -> error.message ?: "Malformed request body"
+            }
+            respondText("{\"error\":{\"message\":\"${escape(message)}\",\"type\":\"invalid_request_error\"}}", ContentType.Application.Json, HttpStatusCode.BadRequest)
+            null
+        }
+
     private suspend fun io.ktor.server.application.ApplicationCall.receiveValidatedBody(): String? {
         if ((request.headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: 0L) > MAX_BODY_BYTES) {
             respondText("{\"error\":{\"message\":\"Request body is too large\",\"type\":\"invalid_request_error\"}}", ContentType.Application.Json, HttpStatusCode.PayloadTooLarge)
@@ -153,7 +180,21 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
         return body
     }
 
-    private fun escape(value: String) = value.replace("\\", "\\\\").replace("\"", "\\\"")
+    /** Escapes a value for safe embedding in a JSON string literal. */
+    private fun escape(value: String): String = buildString(value.length + 8) {
+        value.forEach { character ->
+            when (character) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                '\b' -> append("\\b")
+                '' -> append("\\f")
+                else -> if (character < ' ') append("\\u%04x".format(character.code)) else append(character)
+            }
+        }
+    }
 
     private fun modelOf(body: String): String = runCatching { JSONObject(body).optString("model", "") }.getOrDefault("")
 

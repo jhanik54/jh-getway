@@ -160,4 +160,6 @@
     <string name="str_all_6a7208">All</string>
     <string name="str_jh_soft_corporation_4f2b1c">JH Soft Corporation</string>
     <string name="str_splash_logo_description_7a3e90">JH GetWay logo</string>
+    <string name="str_keys_unreadable_title_5d3a71">Some API keys need to be entered again</string>
+    <string name="str_keys_unreadable_body_7b91c4">The device keystore was reset (for example after a screen-lock change), so the stored keys can no longer be decrypted. Open each provider and enter its API key again.</string>
 </resources>

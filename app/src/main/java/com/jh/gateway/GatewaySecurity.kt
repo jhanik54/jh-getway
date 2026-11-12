@@ -24,6 +24,12 @@ class GatewaySecurity(context: Context) {
 
     init {
         if (!prefs.contains(GATEWAY_KEY)) prefs.edit().putString(GATEWAY_KEY, encrypt(createGatewayKey())).apply()
+        // If the stored key can no longer be decrypted (e.g. the AndroidKeyStore key was
+        // invalidated by a screen-lock change), regenerate it instead of leaving the
+        // gateway permanently unauthenticated with an empty key.
+        if (decrypt(prefs.getString(GATEWAY_KEY, null).orEmpty()).isNullOrBlank()) {
+            prefs.edit().putString(GATEWAY_KEY, encrypt(createGatewayKey())).apply()
+        }
     }
 
     fun gatewayKey(): String = decrypt(prefs.getString(GATEWAY_KEY, null).orEmpty()) ?: ""

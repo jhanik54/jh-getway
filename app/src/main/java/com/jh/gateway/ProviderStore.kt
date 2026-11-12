@@ -66,6 +66,17 @@ class ProviderStore(context: Context) {
 
     fun apiKey(provider: StoredProvider): String? = prefs.getString(keyName(provider.id), null)?.let(::decrypt)
 
+    /**
+     * True when a stored API key can no longer be decrypted (the AndroidKeyStore master key
+     * was invalidated, e.g. after a screen-lock change). The provider is still listed, but its
+     * key must be entered again.
+     */
+    @Synchronized
+    fun hasUnreadableKeys(): Boolean = list().any { provider ->
+        val stored = prefs.getString(keyName(provider.id), null) ?: return@any false
+        decrypt(stored).isNullOrBlank()
+    }
+
     @Synchronized
     fun markCooldown(provider: StoredProvider, millis: Long) {
         save(list().map { if (it.id == provider.id) it.copy(cooldownUntil = System.currentTimeMillis() + millis) else it })
@@ -118,8 +129,14 @@ class ProviderStore(context: Context) {
     @Synchronized
     fun importPayload(payload: String, replace: Boolean = false) {
         val incoming = JSONArray(payload)
-        if (replace) prefs.edit().remove(PROVIDERS).apply()
-            for (index in 0 until incoming.length()) {
+        if (replace) {
+            // Remove the old metadata AND every encrypted API key, otherwise the keys of
+            // replaced providers linger in preferences (and are still exportable).
+            val staleKeys = prefs.all.keys.filter { it.startsWith("key_") }
+            prefs.edit().remove(PROVIDERS).apply()
+            staleKeys.forEach { prefs.edit().remove(it).apply() }
+        }
+        for (index in 0 until incoming.length()) {
             val item = incoming.getJSONObject(index)
             val key = item.optString("apiKey")
             if (key.isNotBlank() && list().none { apiKey(it) == key }) add(item.optString("name", "Imported provider"), item.getString("baseUrl"), item.optString("model", "auto"), key, runCatching { ProviderProtocol.valueOf(item.optString("protocol", "OPENAI")) }.getOrDefault(ProviderProtocol.OPENAI), item.optString("aliases").split(',').filter(String::isNotBlank))

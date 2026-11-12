@@ -2,6 +2,7 @@ package com.jh.gateway
 
 import android.content.Context
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -118,5 +119,30 @@ class ProviderStoreTest {
         store.add("Mine", "https://a.example.com", "auto", "key-dup")
         store.importPayload("""[{"name":"Duplicate","baseUrl":"https://b.example.com","model":"auto","priority":2,"protocol":"OPENAI","aliases":"","apiKey":"key-dup"}]""")
         assertEquals(1, store.list().size)
+    }
+
+    @Test
+    fun replaceImportRemovesStaleEncryptedKeys() {
+        val store = ProviderStore(context)
+        store.add("Old", "https://old.example.com", "auto", "key-old")
+        val staleId = store.list().single().id
+        store.importPayload("""[{"name":"New","baseUrl":"https://new.example.com","model":"auto","priority":1,"protocol":"OPENAI","aliases":"","apiKey":"key-new"}]""", replace = true)
+        assertEquals(1, store.list().size)
+        assertEquals("New", store.list().single().name)
+        // The replaced provider's encrypted key must be gone, not merely unreferenced.
+        val prefs = context.getSharedPreferences("gateway_providers", Context.MODE_PRIVATE)
+        assertTrue("stale key still stored", prefs.getString("key_$staleId", null) == null)
+    }
+
+    @Test
+    fun unreadableKeysAreDetected() {
+        val store = ProviderStore(context)
+        store.add("Healthy", "https://ok.example.com", "auto", "key-ok")
+        assertFalse(store.hasUnreadableKeys())
+        // Corrupt the stored ciphertext so it can no longer be decrypted.
+        val id = store.list().single().id
+        context.getSharedPreferences("gateway_providers", Context.MODE_PRIVATE)
+            .edit().putString("key_$id", "not-valid-base64-ciphertext").commit()
+        assertTrue(store.hasUnreadableKeys())
     }
 }

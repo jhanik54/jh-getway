@@ -19,9 +19,14 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         val candidates = eligible(requestedModel, body)
         if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are disabled or cooling down\",\"type\":\"gateway_unavailable\"}}")
         var last = ForwardResult(502, "{\"error\":{\"message\":\"No provider response\",\"type\":\"provider_error\"}}")
+        var validationFailure: ForwardResult? = null
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
-            validationError(body, provider)?.let { return it }
+            // A provider-specific limitation must not fail the whole request: skip that
+            // provider and let the next candidate serve it. Only if every candidate
+            // rejects the body do we surface the validation error.
+            val invalid = validationError(body, provider)
+            if (invalid != null) { validationFailure = invalid; continue }
             val started = System.currentTimeMillis()
             last = runCatching { request(provider, key, body) }.getOrElse { error -> ForwardResult(502, "{\"error\":{\"message\":\"${escape(error.message ?: "Network error")}\",\"type\":\"network_error\"}}", provider.name, failure = if (error is java.net.SocketTimeoutException) ProviderFailure.TIMEOUT else ProviderFailure.NETWORK) }
             when {
@@ -38,7 +43,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             }
             last.failure?.let { health?.recordFailure(provider, it, last.status) }
         }
-        return last
+        return validationFailure ?: last
     }
 
     /** Transparent SSE pass-through. Fallback is still possible until the first upstream byte. */
@@ -46,17 +51,13 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         val requestedModel = runCatching { JSONObject(body).optString("model", "auto") }.getOrDefault("auto")
         val candidates = eligible(requestedModel, body)
         if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are unavailable\",\"type\":\"gateway_unavailable\"}}")
+        var validationFailure: ForwardResult? = null
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
-            validationError(body, provider)?.let { error ->
-                // Explicit SSE error event: unsupported fields are never dropped silently.
-                runCatching {
-                    output.write("data: ${error.body}\n\n".toByteArray())
-                    output.write("data: [DONE]\n\n".toByteArray())
-                    output.flush()
-                }
-                return error
-            }
+            // Skip providers that cannot represent this request instead of aborting the
+            // stream: the next candidate may still serve it.
+            val invalid = validationError(body, provider)
+            if (invalid != null) { validationFailure = invalid; continue }
             val started = System.currentTimeMillis()
             val connectionResult = runCatching { open(provider, key, ProtocolAdapter.toProvider(body, provider)) }
             if (connectionResult.isFailure) { store.markCooldown(provider, 30_000); continue }
@@ -88,7 +89,15 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             health?.recordFailure(provider, classify(status) ?: ProviderFailure.UNKNOWN, status)
             connection.disconnect()
         }
-        return ForwardResult(502, "{\"error\":{\"message\":\"All providers failed before streaming\",\"type\":\"provider_error\"}}")
+        // Every candidate rejected the request: report it explicitly as an SSE error event
+        // so the client never sees a silent, truncated stream.
+        val failure = validationFailure ?: ForwardResult(502, "{\"error\":{\"message\":\"All providers failed before streaming\",\"type\":\"provider_error\"}}")
+        runCatching {
+            output.write("data: ${failure.body}\n\n".toByteArray())
+            output.write("data: [DONE]\n\n".toByteArray())
+            output.flush()
+        }
+        return failure
     }
 
     private fun eligible(requestedModel: String, body: String): List<StoredProvider> {
@@ -102,6 +111,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             if (saved != null && saved.expiresAt > System.currentTimeMillis()) sorted.firstOrNull { it.id == saved.providerId }?.let { selected -> return listOf(selected) + sorted.filterNot { it.id == selected.id } }
             else sticky.remove(key)
         }
+        pruneStickyRoutes()
         if (sorted.size < 2) return sorted
         val strategy = settings.routingStrategy.uppercase()
         val bestTier = chain[sorted.first().id]?.second ?: 0
@@ -121,12 +131,28 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         }
     }
 
+    /**
+     * Drops expired sticky routes. Without this the map grows with every distinct
+     * conversation id for the lifetime of the process.
+     */
+    private fun pruneStickyRoutes() {
+        if (sticky.size <= MAX_STICKY_ROUTES) return
+        val now = System.currentTimeMillis()
+        sticky.entries.removeAll { it.value.expiresAt <= now }
+        if (sticky.size > MAX_STICKY_ROUTES) {
+            val excess = sticky.size - MAX_STICKY_ROUTES
+            sticky.entries.sortedBy { it.value.expiresAt }.take(excess).forEach { sticky.remove(it.key) }
+        }
+    }
+
     /** Returns the ordered candidate list for [requestedModel] without making any network requests. */
     fun simulateRoute(requestedModel: String = "auto"): List<StoredProvider> {
         val safeModel = requestedModel.ifBlank { "auto" }
         val body = """{"model":"${safeModel.replace("\\", "\\\\").replace("\"", "\\\"")}","messages":[]}"""
         return eligible(safeModel, body)
     }
+
+    companion object { private const val MAX_STICKY_ROUTES = 500 }
 
     private fun sessionKey(body: String): String? = runCatching {
         val input = JSONObject(body)
@@ -182,5 +208,17 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         else -> ProviderFailure.UNKNOWN
     }
     private fun retryAfter(connection: HttpURLConnection): Long? = connection.getHeaderField("Retry-After")?.trim()?.let { value -> value.toLongOrNull()?.times(1_000L) ?: runCatching { java.time.ZonedDateTime.parse(value).toInstant().toEpochMilli() - System.currentTimeMillis() }.getOrNull()?.coerceAtLeast(1_000L) }
-    private fun escape(value: String) = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ")
+    /** Escapes a value for safe embedding in a JSON string literal. */
+    private fun escape(value: String): String = buildString(value.length + 8) {
+        value.forEach { character ->
+            when (character) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (character < ' ') append("\\u%04x".format(character.code)) else append(character)
+            }
+        }
+    }
 }

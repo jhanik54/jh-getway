@@ -39,6 +39,29 @@ class GatewayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_RESTART) {
+            // Apply changed settings (port, Wi-Fi mode, concurrency) by rebuilding the server.
+            releaseLocks()
+            gatewayServer?.stop()
+            gatewayServer = null
+            stateStore.state = GatewayRunState.STARTING
+            startForeground(NOTIFICATION_ID, notification("Restarting gateway…"))
+            try {
+                gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats, gatewaySettings, chainStore, providerHealth)
+                gatewayServer.start()
+                acquireLocks()
+                stateStore.state = GatewayRunState.RUNNING
+                stateStore.error = ""
+                getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification("Gateway running • ${gatewaySettings.port}"))
+            } catch (error: Throwable) {
+                releaseLocks()
+                gatewayServer = null
+                stateStore.state = GatewayRunState.ERROR
+                stateStore.error = error.message ?: "Could not restart gateway"
+                stopSelf()
+            }
+            return START_STICKY
+        }
         if (intent?.action == ACTION_STOP) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             releaseLocks()
@@ -52,7 +75,11 @@ class GatewayService : Service() {
         startForeground(NOTIFICATION_ID, notification("Starting gateway…"))
         stateStore.state = GatewayRunState.STARTING
         try {
-            if (gatewayServer == null) gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats, gatewaySettings, chainStore, providerHealth).also { it.start() }
+            // A sticky restart delivers a null intent: the server must still be (re)created.
+            if (gatewayServer == null) {
+                gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats, gatewaySettings, chainStore, providerHealth)
+                gatewayServer.start()
+            }
             acquireLocks()
             stateStore.state = GatewayRunState.RUNNING
             stateStore.error = ""
@@ -95,6 +122,7 @@ class GatewayService : Service() {
 
     companion object {
         const val ACTION_STOP = "com.jh.gateway.STOP"
+        const val ACTION_RESTART = "com.jh.gateway.RESTART"
         private const val CHANNEL_ID = "gateway_status"
         private const val NOTIFICATION_ID = 1001
     }
