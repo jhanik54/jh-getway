@@ -125,7 +125,11 @@ object TestAndroidKeyStore {
         override fun engineInit(params: AlgorithmParameterSpec?, random: SecureRandom?) = Unit
 
         override fun engineGenerateKey(): SecretKey {
-            val key = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+            // Do NOT call KeyGenerator.getInstance() here: our provider is first in
+            // the JCA provider list, so it would recurse into this SPI forever.
+            // Generate 256 bits of randomness directly instead.
+            val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+            val key = javax.crypto.spec.SecretKeySpec(bytes, "AES")
             val alias = ShadowKeyGenParameterSpecBuilder.lastAlias.ifBlank { "jh_gateway_master_key" }
             entries[alias] = KeyStore.SecretKeyEntry(key)
             return key
