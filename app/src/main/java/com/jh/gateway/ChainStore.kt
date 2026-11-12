@@ -20,8 +20,11 @@ class ChainStore(context: Context) {
             }
         }.getOrDefault(emptyList())
         val known = providers.map { it.id }.toSet()
-        val filtered = saved.filter { it.id in known && it.enabled }
-        val missing = providers.filter { provider -> filtered.none { it.id == provider.id } }.map { provider ->
+        // Keep disabled entries: they stay in the chain as disabled so routing can skip them.
+        // Only orphan entries (provider deleted) are dropped.
+        val filtered = saved.filter { it.id in known }
+        val present = filtered.map { it.id }.toSet()
+        val missing = providers.filter { it.id !in present }.map { provider ->
             if (provider.enabled) ChainEntry(provider.id, provider.name, provider.model, ChainTier.BEST, provider.enabled)
             else ChainEntry(provider.id, provider.name, provider.model, ChainTier.BEST, false)
         }
