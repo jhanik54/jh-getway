@@ -71,34 +71,34 @@ class GatewayServerTest {
         return status to body
     }
 
-    @Test
+    @Test(timeout = 30_000)
     fun healthEndpointRespondsWithoutAuthentication() {
         val (status, body) = get("/health")
         assertEquals(200, status)
         assertTrue(body.contains("\"status\":\"ok\""))
     }
 
-    @Test
+    @Test(timeout = 30_000)
     fun healthzAliasResponds() {
         val (status, body) = get("/healthz")
         assertEquals(200, status)
         assertTrue(body.contains("\"status\":\"ok\""))
     }
 
-    @Test
+    @Test(timeout = 30_000)
     fun protectedEndpointRejectsMissingKey() {
         val (status, body) = get("/v1/models")
         assertEquals(401, status)
         assertTrue(body.contains("authentication_error"))
     }
 
-    @Test
+    @Test(timeout = 30_000)
     fun protectedEndpointAcceptsValidKey() {
         val (status, _) = get("/v1/models", security.gatewayKey())
         assertEquals(200, status)
     }
 
-    @Test
+    @Test(timeout = 30_000)
     fun getRequestsDoNotLeakConcurrencyPermits() {
         val key = security.gatewayKey()
         // The permit limit is 2. If GET /v1/models or /v1/gateway/logs leaked their
