@@ -12,7 +12,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(shadows = [ShadowKeyGenParameterSpecBuilder::class.java])
+@Config(shadows = [ShadowKeyGenParameterSpecBuilder::class])
 class ProviderStoreTest {
     private val context: Context = RuntimeEnvironment.getApplication()
 

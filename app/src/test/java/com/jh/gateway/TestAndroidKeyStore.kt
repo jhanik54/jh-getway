@@ -41,18 +41,21 @@ class ShadowKeyGenParameterSpecBuilder {
 
     @Implementation
     fun setBlockModes(vararg blockModes: String): android.security.keystore.KeyGenParameterSpec.Builder {
-        return this
+        @Suppress("UNCHECKED_CAST")
+        return this as android.security.keystore.KeyGenParameterSpec.Builder
     }
 
     @Implementation
     fun setEncryptionPaddings(vararg paddings: String): android.security.keystore.KeyGenParameterSpec.Builder {
-        return this
+        @Suppress("UNCHECKED_CAST")
+        return this as android.security.keystore.KeyGenParameterSpec.Builder
     }
 
     @Implementation
     fun build(): android.security.keystore.KeyGenParameterSpec {
         try {
-            val ctor = KeyGenParameterSpec::class.java.getDeclaredConstructor(String::class.java, Int::class.java)
+            val ctor = android.security.keystore.KeyGenParameterSpec::class.java
+                .getDeclaredConstructor(String::class.java, Int::class.java)
             ctor.isAccessible = true
             return ctor.newInstance(alias, 1)
         } catch (e: Exception) {

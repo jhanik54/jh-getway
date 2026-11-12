@@ -11,7 +11,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(shadows = [ShadowKeyGenParameterSpecBuilder::class.java])
+@Config(shadows = [ShadowKeyGenParameterSpecBuilder::class])
 class GatewaySecurityTest {
     private val context: Context = RuntimeEnvironment.getApplication()
 
