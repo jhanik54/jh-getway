@@ -44,9 +44,11 @@ Phase 4 acceptance is partial: the updated UI has not been compiled or rendered 
 
 ## Phase 5 — Tests and device matrix
 
-- Unit tests for storage, security, routing, versions, adapters, backup, and URL policy.
-- Mock-provider integration tests for fallback, limits, timeouts, and streaming.
-- Android 8–15 matrix, Poco/Xiaomi battery/autostart, reboot, Wi-Fi, low storage, and update rollback.
+- Unit tests for storage, security, routing, versions, adapters, backup, and URL policy. — implemented and passing in CI (`.github/workflows/android.yml` runs `gradle testDebugUnitTest` before building the debug APK). Covers `ProviderStore`, `GatewaySecurity`, `ChainStore`, `GatewaySettings`, `GatewayStats`, `UpdateManager`, protocol adapters, and `BackupManager` (65 `@Test` methods across 10 test classes). AndroidKeyStore behavior is exercised through a software-backed test provider (`TestAndroidKeyStore.kt`) with Robolectric shadows for `KeyGenParameterSpec.Builder`; API-key encrypt/decrypt, 5-failure IP block, rate limiting, and routing-chain disable persistence are all covered.
+- Mock-provider integration tests for fallback, limits, timeouts, and streaming. — partially implemented via `ProviderRouterTest.kt` (MockWebServer): OpenAI/Anthropic `/v1/*` endpoints, 429 `Retry-After` parsing, 5xx/401 cooldown and disable, validation rejection with zero network calls, round-robin/priority/least-latency strategies, sticky sessions, SSE streaming pass-through. Limits (concurrency/semaphore) and explicit per-provider timeout tests are not yet covered.
+- Android 8–15 matrix, Poco/Xiaomi battery/autostart, reboot, Wi-Fi, low storage, and update rollback. — **not executed** on real devices/emulators from this environment (no Android toolchain or devices available). See `docs/DEVICE_MATRIX.md` for the honest per-item status and what is required to run it.
+
+Phase 5 acceptance is partial: automated JVM unit tests execute and pass in CI on every push to `main`; the device/emulator matrix remains manual and unexecuted.
 
 ## Phase 6 — Release hardening
 
