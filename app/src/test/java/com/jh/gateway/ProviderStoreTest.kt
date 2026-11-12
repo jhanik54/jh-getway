@@ -21,7 +21,10 @@ class ProviderStoreTest {
     }
 
     @Before
-    fun setUp() = clearPrefs()
+    fun setUp() {
+        TestAndroidKeyStore.install()
+        clearPrefs()
+    }
 
     @Test
     fun addRejectsNonHttpSchemes() {

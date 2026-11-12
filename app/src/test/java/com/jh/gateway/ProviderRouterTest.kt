@@ -31,6 +31,7 @@ class ProviderRouterTest {
 
     @Before
     fun setUp() {
+        TestAndroidKeyStore.install()
         for (name in listOf("gateway_providers", "provider_health", "gateway_chain", "gateway_settings", "gateway_stats")) {
             context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
         }

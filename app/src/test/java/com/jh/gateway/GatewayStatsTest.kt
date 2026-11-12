@@ -28,10 +28,12 @@ class GatewayStatsTest {
         assertEquals(2, stats.requestCount())
         val recent = stats.recent()
         assertEquals(2, recent.size)
-        assertEquals("model-a", recent[0].model)
-        assertEquals("provider-a", recent[0].provider)
-        assertEquals("/v1/messages", recent[1].endpoint)
-        assertNull(recent[1].provider)
+        // Newest entry is prepended, so the second /v1/messages record is first.
+        assertEquals("/v1/messages", recent[0].endpoint)
+        assertNull(recent[0].provider)
+        assertEquals("model-a", recent[1].model)
+        assertEquals("provider-a", recent[1].provider)
+        assertEquals("/v1/chat/completions", recent[1].endpoint)
     }
 
     @Test
@@ -43,10 +45,11 @@ class GatewayStatsTest {
         assertEquals(32, stats.completionTokens())
         val entries = stats.usageEntries()
         assertEquals(2, entries.size)
-        assertEquals("model-x", entries[0].model)
-        assertEquals("provider-b", entries[1].provider)
-        assertEquals(3, entries[1].promptTokens)
-        assertEquals(7, entries[1].completionTokens)
+        // Newest entry is prepended: the provider-b record comes first.
+        assertEquals("provider-b", entries[0].provider)
+        assertEquals(3, entries[0].promptTokens)
+        assertEquals(7, entries[0].completionTokens)
+        assertEquals("model-x", entries[1].model)
     }
 
     @Test

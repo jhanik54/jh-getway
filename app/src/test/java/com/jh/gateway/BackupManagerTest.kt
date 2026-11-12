@@ -16,6 +16,7 @@ class BackupManagerTest {
 
     @Before
     fun setUp() {
+        TestAndroidKeyStore.install()
         context.getSharedPreferences("gateway_providers", Context.MODE_PRIVATE).edit().clear().commit()
     }
 

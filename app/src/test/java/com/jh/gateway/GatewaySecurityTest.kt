@@ -15,6 +15,7 @@ class GatewaySecurityTest {
 
     @Before
     fun setUp() {
+        TestAndroidKeyStore.install()
         context.getSharedPreferences("gateway_security", Context.MODE_PRIVATE).edit().clear().commit()
     }
 
