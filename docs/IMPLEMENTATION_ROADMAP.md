@@ -35,10 +35,12 @@ Phase 3 acceptance is partial: fixture tests exist but have not been executed on
 
 ## Phase 4 — Observability and UI
 
-- Real service state, live provider health, notifications, and no demo metrics.
-- Category-based settings and provider detail screen.
-- Activity filters/details, token/provider/model breakdown, and redacted diagnostics.
-- Complete English/Bangla resources and accessibility review.
+- Real service state, live provider health, notifications, and no demo metrics. — implemented (HomeScreen polls `GatewayStats` every 2 s; request count, ready-keys count, recent activity, and route card (strategy + live chain count) are computed from real stores; `demoLogs`/`ProviderKey`/`KeyStatus` — which had never existed as declarations — are now properly defined; provider cards show health (status/latency/last error) from `ProviderHealthStore`; provider rows click through to a detail dialog).
+- Category-based settings and provider detail screen. — implemented (settings grouped into Network / Routing / Appearance / Security & privacy sections; `ProviderDetailDialog` shows base URL, protocol, model, aliases, priority, masked key, health status/latency/error/check time, and per-provider request count, success rate, avg latency, and prompt/completion tokens; per-provider breakdown uses the new `UsageEntry` log).
+- Activity filters/details, token/provider/model breakdown, and redacted diagnostics. — implemented (MonitoringDialog: Logs filter chips (All/Errors with counts) and tap-to-expand rows with endpoint, status meaning, latency, model, provider; Usage section shows all-time totals, recent success rate, avg latency, tokens, plus top-5 breakdowns by requests/provider, tokens/provider, tokens/model; Diagnostics section builds a redacted report — app version, Android SDK, device, gateway state, port/Wi-Fi mode, provider names with health status only, and last 10 log lines — copyable to clipboard; no keys, prompts, or responses are included).
+- Complete English/Bangla resources and accessibility review. — implemented (158 keys extracted to `values/strings.xml` and translated to `values-bn/strings.xml`; icons labeled or explicitly decorative; contrast raised to WCAG AA for status colors (green/orange/red); `docs/ACCESSIBILITY_REVIEW.md` documents findings and limits).
+
+Phase 4 acceptance is partial: the updated UI has not been compiled or rendered on a device (no Android toolchain on the dev host). `MainActivity.kt` previously referenced never-declared symbols and has been structurally corrected (declarations added, demo metrics removed); compile verification happens via CI or a device. Inner limitations: interpolated/runtime strings stay in English in the Bangla locale; FilterChips are 32 dp tall.
 
 ## Phase 5 — Tests and device matrix
 

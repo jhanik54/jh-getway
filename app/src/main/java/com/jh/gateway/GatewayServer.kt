@@ -36,7 +36,7 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
             }
             get("/v1/gateway/logs") {
                 if (!call.authorized()) return@get
-                val data = stats.recent().joinToString(",") { "{\"time\":${it.time},\"endpoint\":\"${escape(it.endpoint)}\",\"status\":${it.status},\"provider\":\"${escape(it.provider ?: "")}\",\"latencyMs\":${it.latencyMs}}" }
+                val data = stats.recent().joinToString(",") { "{\"time\":${it.time},\"endpoint\":\"${escape(it.endpoint)}\",\"status\":${it.status},\"provider\":\"${escape(it.provider ?: "")}\",\"latencyMs\":${it.latencyMs},\"model\":\"${escape(it.model)}\"}" }
                 call.respondText("{\"object\":\"list\",\"data\":[$data]}", ContentType.Application.Json)
             }
             post("/v1/gateway/simulate") {
@@ -54,12 +54,16 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
                 try {
                     val body = call.receiveValidatedBody() ?: return@post
                     if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
-                        call.respondOutputStream(ContentType.Text.EventStream) { router.stream(body, this, ClientProtocol.OPENAI) }
+                        call.respondOutputStream(ContentType.Text.EventStream) {
+                            val started = System.currentTimeMillis()
+                            val result = router.stream(body, this, ClientProtocol.OPENAI)
+                            stats.record("/v1/chat/completions", result.status, result.provider, System.currentTimeMillis() - started, modelOf(body))
+                        }
                     } else {
                         val started = System.currentTimeMillis()
                         val result = router.forward(body)
-                        stats.recordUsage(result.body)
-                        stats.record("/v1/chat/completions", result.status, result.provider, System.currentTimeMillis() - started)
+                        stats.recordUsage(result.body, result.provider, modelOf(body))
+                        stats.record("/v1/chat/completions", result.status, result.provider, System.currentTimeMillis() - started, modelOf(body))
                         call.respondText(result.body, ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
                     }
                 } finally {
@@ -70,16 +74,40 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
                 if (!call.authorized()) return@post
                 try {
                     val body = call.receiveValidatedBody() ?: return@post
-                    if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) call.respondOutputStream(ContentType.Text.EventStream) { router.stream(ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC), this, ClientProtocol.ANTHROPIC) }
-                    else { val result = router.forward(ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC)); stats.recordUsage(result.body); call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.ANTHROPIC), ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
+                    val translated = ProtocolAdapter.toOpenAi(body, ClientProtocol.ANTHROPIC)
+                    if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
+                        call.respondOutputStream(ContentType.Text.EventStream) {
+                            val started = System.currentTimeMillis()
+                            val result = router.stream(translated, this, ClientProtocol.ANTHROPIC)
+                            stats.record("/v1/messages", result.status, result.provider, System.currentTimeMillis() - started, modelOf(translated))
+                        }
+                    } else {
+                        val started = System.currentTimeMillis()
+                        val result = router.forward(translated)
+                        stats.recordUsage(result.body, result.provider, modelOf(translated))
+                        stats.record("/v1/messages", result.status, result.provider, System.currentTimeMillis() - started, modelOf(translated))
+                        call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.ANTHROPIC), ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
+                    }
                 } finally { call.releasePermit() }
             }
             post("/v1/responses") {
                 if (!call.authorized()) return@post
                 try {
                     val body = call.receiveValidatedBody() ?: return@post
-                    if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) call.respondOutputStream(ContentType.Text.EventStream) { router.stream(ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES), this, ClientProtocol.RESPONSES) }
-                    else { val result = router.forward(ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES)); stats.recordUsage(result.body); call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.RESPONSES), ContentType.Application.Json, HttpStatusCode.fromValue(result.status)) }
+                    val translated = ProtocolAdapter.toOpenAi(body, ClientProtocol.RESPONSES)
+                    if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
+                        call.respondOutputStream(ContentType.Text.EventStream) {
+                            val started = System.currentTimeMillis()
+                            val result = router.stream(translated, this, ClientProtocol.RESPONSES)
+                            stats.record("/v1/responses", result.status, result.provider, System.currentTimeMillis() - started, modelOf(translated))
+                        }
+                    } else {
+                        val started = System.currentTimeMillis()
+                        val result = router.forward(translated)
+                        stats.recordUsage(result.body, result.provider, modelOf(translated))
+                        stats.record("/v1/responses", result.status, result.provider, System.currentTimeMillis() - started, modelOf(translated))
+                        call.respondText(ProtocolAdapter.fromOpenAi(result.body, ClientProtocol.RESPONSES), ContentType.Application.Json, HttpStatusCode.fromValue(result.status))
+                    }
                 } finally { call.releasePermit() }
             }
         }
@@ -126,6 +154,8 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
     }
 
     private fun escape(value: String) = value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    private fun modelOf(body: String): String = runCatching { JSONObject(body).optString("model", "") }.getOrDefault("")
 
     fun start() = server.start(wait = false)
     fun stop() = server.stop(500, 1_000)
