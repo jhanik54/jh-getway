@@ -217,10 +217,11 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
             running = gatewayState.state == GatewayRunState.RUNNING
         }
     }
+    val gatewayFailedToStart = stringResource(R.string.str_gateway_failed_to_start_555ba8)
     LaunchedEffect(gatewayState.state) {
         running = gatewayState.state == GatewayRunState.RUNNING
         if (gatewayState.state == GatewayRunState.ERROR) {
-            updateMessage = gatewayState.error.ifBlank { stringResource(R.string.str_gateway_failed_to_start_555ba8) }
+            updateMessage = gatewayState.error.ifBlank { gatewayFailedToStart }
         }
     }
     var theme by remember { mutableStateOf(gatewaySettings.theme) }
@@ -894,7 +895,7 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) } },
-        dismissButton = { TextButton(onClick = { stats.clear(); logs = emptyList(); expandedTime = null }) { Text(stringResource(R.string.str_clear_logs_532ffc)) } }
+        dismissButton = { TextButton(onClick = { stats.clear(); logs = emptyList(); expandedTime = null; section = 0 }) { Text(stringResource(R.string.str_clear_logs_532ffc)) } }
     )
 }
 
