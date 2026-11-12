@@ -1,9 +1,7 @@
 package com.jh.gateway
 
-import android.security.keystore.KeyGenParameterSpec
 import java.io.InputStream
 import java.io.OutputStream
-import java.lang.reflect.Constructor
 import java.security.Key
 import java.security.KeyStore
 import java.security.KeyStoreSpi
@@ -21,64 +19,46 @@ import javax.crypto.KeyGeneratorSpi
 import javax.crypto.SecretKey
 import org.robolectric.annotation.Implements
 import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.RealObject
 
 /**
  * Robolectric shadow for KeyGenParameterSpec.Builder.
  * Robolectric does not ship android.security.keystore, so the app's
  * KeyGenParameterSpec.Builder(...) chain cannot run against android-all
- * stubs (every method throws "not mocked"). This shadow lets the software
- * KeyGeneratorSpi read the keystoreAlias from the spec so providerStore and
- * gatewaySecurity can each persist their own master key alias.
+ * stubs (every method throws "not mocked"). This shadow records the
+ * requested alias and returns the real Builder for chained calls; build()
+ * returns null because the spec itself cannot be constructed under stubs.
+ * The app passes the (null) spec to the key generator, and SoftwareKeyGeneratorSpi
+ * reads [lastAlias] to store the generated key under the right alias.
  */
 @Implements(android.security.keystore.KeyGenParameterSpec.Builder::class)
 class ShadowKeyGenParameterSpecBuilder {
-    private var alias: String = ""
+    @RealObject
+    private lateinit var realBuilder: android.security.keystore.KeyGenParameterSpec.Builder
+
+    companion object {
+        internal var lastAlias: String = ""
+    }
 
     @Implementation
     fun __constructor__(keystoreAlias: String, purposes: Int) {
-        alias = keystoreAlias
+        lastAlias = keystoreAlias
     }
 
     @Implementation
-    fun setBlockModes(vararg blockModes: String): android.security.keystore.KeyGenParameterSpec.Builder {
-        @Suppress("UNCHECKED_CAST")
-        return this as android.security.keystore.KeyGenParameterSpec.Builder
+    fun setBlockModes(vararg blockModes: String): android.security.keystore.KeyGenParameterSpec.Builder? {
+        return realBuilder
     }
 
     @Implementation
-    fun setEncryptionPaddings(vararg paddings: String): android.security.keystore.KeyGenParameterSpec.Builder {
-        @Suppress("UNCHECKED_CAST")
-        return this as android.security.keystore.KeyGenParameterSpec.Builder
+    fun setEncryptionPaddings(vararg paddings: String): android.security.keystore.KeyGenParameterSpec.Builder? {
+        return realBuilder
     }
 
     @Implementation
-    fun build(): android.security.keystore.KeyGenParameterSpec {
-        try {
-            val ctor = android.security.keystore.KeyGenParameterSpec::class.java
-                .getDeclaredConstructor(String::class.java, Int::class.java)
-            ctor.isAccessible = true
-            return ctor.newInstance(alias, 1)
-        } catch (e: Exception) {
-            throw RuntimeException("Failed to instantiate KeyGenParameterSpec via reflection", e)
-        }
+    fun build(): android.security.keystore.KeyGenParameterSpec? {
+        return null
     }
-}
-
-/**
- * Robolectric shadow for KeyGenParameterSpec, exposing getKeystoreAlias()
- * so that SoftwareKeyGeneratorSpi.engineGenerateKey can read the alias.
- */
-@Implements(android.security.keystore.KeyGenParameterSpec::class)
-class ShadowKeyGenParameterSpec {
-    private var alias: String = ""
-
-    @Implementation
-    fun __constructor__(keyAlias: String, purposes: Int) {
-        alias = keyAlias
-    }
-
-    @Implementation
-    fun getKeystoreAlias(): String = alias
 }
 
 /**
@@ -140,17 +120,13 @@ object TestAndroidKeyStore {
     }
 
     class SoftwareKeyGeneratorSpi : KeyGeneratorSpi() {
-        private var spec: AlgorithmParameterSpec? = null
-
         override fun engineInit(random: SecureRandom?) = Unit
         override fun engineInit(keySize: Int, random: SecureRandom?) = Unit
-        override fun engineInit(params: AlgorithmParameterSpec?, random: SecureRandom?) {
-            spec = params
-        }
+        override fun engineInit(params: AlgorithmParameterSpec?, random: SecureRandom?) = Unit
 
         override fun engineGenerateKey(): SecretKey {
             val key = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
-            val alias = (spec as? KeyGenParameterSpec)?.getKeystoreAlias() ?: "jh_gateway_master_key"
+            val alias = ShadowKeyGenParameterSpecBuilder.lastAlias.ifBlank { "jh_gateway_master_key" }
             entries[alias] = KeyStore.SecretKeyEntry(key)
             return key
         }
