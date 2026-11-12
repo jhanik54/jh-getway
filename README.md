@@ -41,7 +41,7 @@ Releases are built and verified on tag push (`v*`). See [docs/RELEASE_CHECKLIST.
 
 ## Test (টেস্ট)
 
-- 65 JVM unit tests across 10 classes (`app/src/test/java/com/jh/gateway/`), Robolectric + MockWebServer, run in CI on every push
+- 83 JVM unit tests across 11 classes (`app/src/test/java/com/jh/gateway/`), Robolectric + MockWebServer, run in CI on every push — including a real loopback-socket test of the HTTP surface and the permit accounting
 - AndroidKeyStore is exercised through a software-backed test provider; no real device or key material is used
 - Instrumented tests (`androidTest`) exist for protocol fixtures but are **not** executed in CI (no emulator); the device matrix remains **not executed** — see [docs/DEVICE_MATRIX.md](docs/DEVICE_MATRIX.md)
 
