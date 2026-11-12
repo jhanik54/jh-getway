@@ -48,7 +48,7 @@ object TestAndroidKeyStore {
         }
     }
 
-    private class SoftwareKeyStoreSpi : KeyStoreSpi() {
+    class SoftwareKeyStoreSpi : KeyStoreSpi() {
         override fun engineLoad(stream: InputStream?, password: CharArray?) = Unit
         override fun engineStore(stream: OutputStream?, password: CharArray?) = Unit
         override fun engineGetKey(alias: String, password: CharArray?): Key? = entries[alias]?.secretKey
@@ -77,7 +77,7 @@ object TestAndroidKeyStore {
         }
     }
 
-    private class SoftwareKeyGeneratorSpi : KeyGeneratorSpi() {
+    class SoftwareKeyGeneratorSpi : KeyGeneratorSpi() {
         private var spec: AlgorithmParameterSpec? = null
 
         override fun engineInit(random: SecureRandom?) = Unit
