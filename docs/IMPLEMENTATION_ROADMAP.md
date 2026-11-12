@@ -52,9 +52,15 @@ Phase 5 acceptance is partial: automated JVM unit tests execute and pass in CI o
 
 ## Phase 6 — Release hardening
 
-- Release-only signing secrets; no fallback password.
-- APK package/signature/version/checksum verification.
-- Shrink/minify policy, dependency/license review, README refresh, splash implementation, and release checklist.
+- Release-only signing secrets; no fallback password. — implemented. `app/build.gradle.kts` no longer contains a `changeit` (or any) fallback: signing is applied only when `JH_SIGNING_PASSWORD` (GitHub Secret) and the stable keystore both exist; local builds without the secret fall back to AGP's default debug signing. CI restores the stable keystore from cache keyed `jh-getway-release-signing-v1`, uses the secret for key creation/signing, and the tag-only release step **refuses to build** if the secret is missing.
+- APK package/signature/version/checksum verification. — implemented at two layers. CI: `scripts/verify-apk.sh` parses `applicationId`/`versionCode`/`versionName` from `app/build.gradle.kts` (cannot drift), checks them against `aapt dump badging`, validates the APK signature and prints signer certificates and SHA-256; it runs for the debug APK on every push and for the release APK on tags, failing the job on mismatch. In-app: `UpdateManager` now re-verifies every downloaded update (PK magic, >1 MB, SHA-256 vs `latest.json` when present, package name, strictly-newer `versionCode`, signing-certificate match with the installed app via `GET_SIGNATURES`/`signingInfo`) and re-verifies at install time.
+- Shrink/minify policy — documented and deliberately OFF (`isMinifyEnabled = false` / `isShrinkResources = false`) with the re-enable criteria in `docs/RELEASE_CHECKLIST.md`; R8 cannot be validated without a device.
+- Dependency/license review — `THIRD_PARTY_NOTICES.md` now records an entry-by-entry review (ship vs test-only vs build toolchain, declared licenses, *needs review* items flagged), and CI renders resolved `releaseRuntimeClasspath`/`testDebugUnitTestRuntimeClasspath` trees as the `dependency-tree` artifact on every push.
+- README refresh — done (current features, build/signing/release/test instructions, layout, license links; stale "placeholder" status removed).
+- Splash implementation — done per `docs/UI_SPLASH_ANIMATION_SPEC.md`: branded cold-launch splash in `SplashScreen.kt` (selected-theme background, JH GetWay rises from below center → controlled upper position → restrained settle to center, then JH Soft Corporation line, ~2.3 s, once per cold launch via `rememberSaveable`, reduced-motion aware via `ANIMATOR_DURATION_SCALE`, no fake progress, gateway composes behind it). Not yet run on a device.
+- Release checklist — `docs/RELEASE_CHECKLIST.md` (signing secrets, verification steps, tag → verify → publish flow, rollback, leak contingency); CI publishes both APKs + `latest.json` on `v*` tags.
+
+Phase 6 acceptance is partial: the hardening is implemented and CI-verified for build/test/verification steps, but the release APK has never actually been built (no tag pushed), the app-level signature verification has not run on a device, and the device matrix from Phase 5 remains unexecuted. The minify/shrink mode stays off until on-device verification exists.
 
 ## Current status
 
