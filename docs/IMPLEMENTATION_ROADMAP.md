@@ -26,10 +26,12 @@ This roadmap orders the supplied technical audit and legal/splash specifications
 
 ## Phase 3 — Protocol conformance
 
-- Canonical internal request/response model.
-- OpenAI Chat, Anthropic Messages, and Responses fixtures.
-- Tool calls/results, JSON mode, multimodal policy, stop reasons, usage, SSE errors, and cancellation.
-- Explicit unsupported-field errors; no silent data loss.
+- Canonical internal request/response model. — implemented (`GatewayModels.kt`: CanonicalRequest/CanonicalResponse, structural validation via `parse()` enforced on the provider forwarding path).
+- OpenAI Chat, Anthropic Messages, and Responses fixtures. — implemented (`ProtocolFixtureTest.kt`, plus fixed a stale fixture in `ProtocolAdapterTest.kt`).
+- Tool calls/results, JSON mode, multimodal policy, stop reasons, usage, SSE errors, and cancellation. — implemented (bidirectional tool-call translation incl. streaming deltas; `response_format` pass-through for OpenAI and explicit 400 for Anthropic; image sources translated to Anthropic blocks (http/base64), unsupported sources rejected; stop reasons and usage mapped both ways; upstream SSE error events re-emitted in client-native error chunks; client disconnect stops the upstream pump and closes the provider connection).
+- Explicit unsupported-field errors; no silent data loss. — implemented (`validate()` -> 400 `invalid_request_error` with the offending field name, never provider fallback; streams emit an explicit error event; non-stream responses map tool calls, usage, and stop reasons end to end).
+
+Phase 3 acceptance is partial: fixture tests exist but have not been executed on a device/emulator (no Android toolchain on the dev host). Verify with `./gradlew connectedAndroidTest` or the CI/device matrix in Phase 5.
 
 ## Phase 4 — Observability and UI
 

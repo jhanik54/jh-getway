@@ -20,7 +20,7 @@ class ProtocolAdapterTest {
     @Test
     fun anthropicToolUseBecomesOpenAiToolCall() {
         val body = """{"id":"msg_1","model":"claude-test","content":[{"type":"tool_use","id":"call_1","name":"lookup","input":{"q":"jh"}}],"stop_reason":"tool_use"}"""
-        val converted = JSONObject(ProtocolAdapter.fromOpenAi(body, ClientProtocol.ANTHROPIC))
+        val converted = JSONObject(ProtocolAdapter.fromProvider(body, StoredProvider("id", "Test", "https://example.com", "claude-test", 1, protocol = ProviderProtocol.ANTHROPIC)))
         val call = converted.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getJSONArray("tool_calls").getJSONObject(0)
         assertEquals("lookup", call.getJSONObject("function").getString("name"))
         assertEquals("tool_calls", converted.getJSONArray("choices").getJSONObject(0).getString("finish_reason"))

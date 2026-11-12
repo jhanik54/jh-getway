@@ -21,6 +21,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         var last = ForwardResult(502, "{\"error\":{\"message\":\"No provider response\",\"type\":\"provider_error\"}}")
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
+            validationError(body, provider)?.let { return it }
             val started = System.currentTimeMillis()
             last = runCatching { request(provider, key, body) }.getOrElse { error -> ForwardResult(502, "{\"error\":{\"message\":\"${escape(error.message ?: "Network error")}\",\"type\":\"network_error\"}}", provider.name, failure = if (error is java.net.SocketTimeoutException) ProviderFailure.TIMEOUT else ProviderFailure.NETWORK) }
             when {
@@ -47,6 +48,15 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are unavailable\",\"type\":\"gateway_unavailable\"}}")
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
+            validationError(body, provider)?.let { error ->
+                // Explicit SSE error event: unsupported fields are never dropped silently.
+                runCatching {
+                    output.write("data: ${error.body}\n\n".toByteArray())
+                    output.write("data: [DONE]\n\n".toByteArray())
+                    output.flush()
+                }
+                return error
+            }
             val started = System.currentTimeMillis()
             val connectionResult = runCatching { open(provider, key, ProtocolAdapter.toProvider(body, provider)) }
             if (connectionResult.isFailure) { store.markCooldown(provider, 30_000); continue }
@@ -65,6 +75,9 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
                     if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L) }
                     health?.recordSuccess(provider, System.currentTimeMillis() - started)
                     return ForwardResult(status, "", provider.name)
+                } catch (cancelled: java.io.IOException) {
+                    // Client disconnected mid-stream (cancellation): stop pumping upstream bytes and close the provider connection.
+                    return ForwardResult(499, "", provider.name)
                 } finally { connection.disconnect() }
             }
             if (status == 401 || status == 403) store.disable(provider)
@@ -120,6 +133,16 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         input.optString("user").takeIf { it.isNotBlank() }
             ?: input.optJSONObject("metadata")?.optString("conversation_id")?.takeIf { it.isNotBlank() }
     }.getOrNull()
+
+    private fun validationError(body: String, provider: StoredProvider): ForwardResult? =
+        try {
+            GatewayModels.validate(body, provider.protocol, ClientProtocol.OPENAI)
+            null
+        } catch (error: UnsupportedFieldException) {
+            ForwardResult(400, "{\"error\":{\"message\":\"Provider ${escape(provider.name)} does not support field '${error.field}'\",\"type\":\"invalid_request_error\"}}", provider.name, failure = ProviderFailure.INVALID_REQUEST)
+        } catch (error: CanonicalFormatException) {
+            ForwardResult(400, "{\"error\":{\"message\":\"${escape(error.message ?: "Malformed request body")}\",\"type\":\"invalid_request_error\"}}", provider.name, failure = ProviderFailure.INVALID_REQUEST)
+        }
 
     private fun request(provider: StoredProvider, key: String, body: String): ForwardResult {
         val connection = open(provider, key, ProtocolAdapter.toProvider(body, provider))
