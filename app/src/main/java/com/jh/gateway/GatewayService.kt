@@ -48,7 +48,7 @@ class GatewayService : Service() {
             startForeground(NOTIFICATION_ID, notification("Restarting gateway…"))
             try {
                 gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats, gatewaySettings, chainStore, providerHealth)
-                gatewayServer.start()
+                gatewayServer?.start()
                 acquireLocks()
                 stateStore.state = GatewayRunState.RUNNING
                 stateStore.error = ""
@@ -78,7 +78,7 @@ class GatewayService : Service() {
             // A sticky restart delivers a null intent: the server must still be (re)created.
             if (gatewayServer == null) {
                 gatewayServer = GatewayServer(providerStore, gatewaySecurity, gatewayStats, gatewaySettings, chainStore, providerHealth)
-                gatewayServer.start()
+                gatewayServer?.start()
             }
             acquireLocks()
             stateStore.state = GatewayRunState.RUNNING

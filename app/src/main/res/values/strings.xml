@@ -162,4 +162,64 @@
     <string name="str_splash_logo_description_7a3e90">JH GetWay logo</string>
     <string name="str_keys_unreadable_title_5d3a71">Some API keys need to be entered again</string>
     <string name="str_keys_unreadable_body_7b91c4">The device keystore was reset (for example after a screen-lock change), so the stored keys can no longer be decrypted. Open each provider and enter its API key again.</string>
+    <string name="str_backup_cannot_open_274dea">Could not open selected file</string>
+    <string name="str_backup_cannot_read_c4a17d">Could not read selected file</string>
+    <string name="str_backup_export_cancelled_2ab62e">Export cancelled</string>
+    <string name="str_backup_export_failed_reason_670b95">Export failed: ${it.message}</string>
+    <string name="str_backup_exported_e3eeae">Backup exported successfully</string>
+    <string name="str_backup_import_cancelled_a88478">Import cancelled</string>
+    <string name="str_backup_import_failed_428856">Import failed: wrong password or damaged file</string>
+    <string name="str_backup_import_failed_reason_6eaaef">Import failed: ${it.message}</string>
+    <string name="str_backup_imported_0a0269">Backup imported successfully</string>
+    <string name="str_backup_intro_bbb80c">Export your encrypted providers or import a backup file.</string>
+    <string name="str_chain_no_provider_532e25">No provider</string>
+    <string name="str_detail_aliases_b60a94">Aliases</string>
+    <string name="str_detail_api_key_6325d8">API key</string>
+    <string name="str_detail_avg_latency_6ffad6">Avg latency</string>
+    <string name="str_detail_base_url_6d97c7">Base URL</string>
+    <string name="str_detail_checked_810874">Checked</string>
+    <string name="str_detail_last_error_18c7dd">Last error</string>
+    <string name="str_detail_last_latency_d52d9e">Last latency</string>
+    <string name="str_detail_model_08f524">Model</string>
+    <string name="str_detail_no_usage_583f41">No usage recorded yet</string>
+    <string name="str_detail_priority_f31aca">Priority</string>
+    <string name="str_detail_protocol_833f61">Protocol</string>
+    <string name="str_detail_requests_21430a">Requests</string>
+    <string name="str_detail_status_9729f9">Status</string>
+    <string name="str_detail_success_rate_948aa3">Success rate</string>
+    <string name="str_detail_tokens_5e84dd">Tokens</string>
+    <string name="str_diagnostics_copied_e55f8a">Diagnostics copied</string>
+    <string name="str_gateway_failed_to_start_555ba8">Gateway failed to start</string>
+    <string name="str_health_healthy_f66c3e">Healthy</string>
+    <string name="str_health_no_data_70fb16">No health data yet</string>
+    <string name="str_health_not_checked_d4c95f">Health not checked yet</string>
+    <string name="str_health_unhealthy_141907">Unhealthy</string>
+    <string name="str_log_none_509e55">None</string>
+    <string name="str_log_not_recorded_0cebf9">Not recorded</string>
+    <string name="str_status_cooling_down_4ceade">Cooling down</string>
+    <string name="str_status_disabled_6808c3">Disabled</string>
+    <string name="str_status_enabled_a2e77d">Enabled</string>
+    <string name="str_strategy_least_latency_dddcc6">Least latency</string>
+    <string name="str_strategy_round_robin_3d7c5a">Round robin</string>
+    <string name="str_unlock_subtitle_a7b10d">Verify your screen lock to continue</string>
+    <string name="str_unlock_title_282692">Unlock JH GetWay</string>
+    <string name="str_update_current_version_9ae4a9">Current version ${BuildConfig.VERSION_NAME}</string>
+    <string name="str_update_downloading_b5c780">Downloading $progress%</string>
+    <string name="str_update_new_version_736c0b">New version ${available.versionName}</string>
+    <string name="str_update_progress_saved_8cea40">$progress% · Saved inside JH GetWay</string>
+    <string name="str_update_ready_f0ecb9">A downloaded update is ready to install.</string>
+    <string name="str_update_saved_inside_966493">Saved inside JH GetWay</string>
+    <string name="str_update_tap_check_571564">Tap Check now to look for a new release.</string>
+    <string name="str_usage_avg_latency_0d53b4">Average latency: ${average}ms (recent)</string>
+    <string name="str_usage_recent_success_c413b9">Recent success rate: $successRate%</string>
+    <string name="str_usage_tokens_619e48">Tokens: ${stats.promptTokens()} input · ${stats.completionTokens()} output</string>
+    <string name="str_card_priority_926478">Priority ${key.priority}</string>
+    <string name="str_detail_latency_b89e54">Latency</string>
+    <string name="str_detail_provider_d2cc2e">Provider</string>
+    <string name="str_help_troubleshooting_3a4b97">• 401: use the gateway key, not the provider key.
+• Connection refused: start the gateway and check the port.
+• Wi-Fi device cannot connect: enable Wi-Fi open and use the phone IP.
+• All providers unavailable: check provider keys and Routing chain.
+• Port busy: choose another port in Settings, then restart the gateway.</string>
+    <string name="str_help_battery_advice_90403d">For $manufacturer and especially Poco/Xiaomi: enable Autostart, set Battery saver to No restrictions, and lock JH GetWay in Recent apps. Then enable Start on boot in Settings.</string>
 </resources>

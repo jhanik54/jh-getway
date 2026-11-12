@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity() {
             val keyguard = getSystemService(KeyguardManager::class.java)
             if (keyguard.isKeyguardSecure) {
                 lockPromptShowing = true
-                startActivityForResult(keyguard.createConfirmDeviceCredentialIntent("Unlock JH GetWay", "Verify your screen lock to continue"), 701)
+                startActivityForResult(keyguard.createConfirmDeviceCredentialIntent(getString(R.string.str_unlock_title_282692), getString(R.string.str_unlock_subtitle_a7b10d)), 701)
             } else securitySettings.lastUnlock = System.currentTimeMillis()
         } else if (!lockPromptShowing) securitySettings.lastUnlock = System.currentTimeMillis()
     }
@@ -176,10 +176,12 @@ private data class ProviderKey(
     val healthError: String = ""
 )
 
-private fun strategyLabel(strategy: String): String = when (strategy.uppercase()) {
-    "PRIORITY" -> "Priority"
-    "ROUND_ROBIN" -> "Round robin"
-    "LEAST_LATENCY" -> "Least latency"
+/** Strategy label. [priorityLabel] and [roundRobinLabel] are resolved by the caller so the
+ *  labels follow the active locale. */
+private fun strategyLabel(strategy: String, priorityLabel: String, roundRobinLabel: String, leastLatencyLabel: String): String = when (strategy.uppercase()) {
+    "PRIORITY" -> priorityLabel
+    "ROUND_ROBIN" -> roundRobinLabel
+    "LEAST_LATENCY" -> leastLatencyLabel
     else -> strategy
 }
 
@@ -217,7 +219,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     LaunchedEffect(gatewayState.state) {
         running = gatewayState.state == GatewayRunState.RUNNING
         if (gatewayState.state == GatewayRunState.ERROR) {
-            updateMessage = gatewayState.error.ifBlank { "Gateway failed to start" }
+            updateMessage = gatewayState.error.ifBlank { stringResource(R.string.str_gateway_failed_to_start_555ba8) }
         }
     }
     var theme by remember { mutableStateOf(gatewaySettings.theme) }
@@ -259,7 +261,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
             }
         ) { padding ->
             when (tab) {
-                0 -> HomeScreen(Modifier.padding(padding), running, gatewaySecurity.maskedKey(), gatewaySettings.port, gatewaySettings.wifiMode, keys, strategyLabel(gatewaySettings.routingStrategy), chainCount, error = updateMessage, onCopyKey = {
+                0 -> HomeScreen(Modifier.padding(padding), running, gatewaySecurity.maskedKey(), gatewaySettings.port, gatewaySettings.wifiMode, keys, strategyLabel(gatewaySettings.routingStrategy, stringResource(R.string.str_detail_priority_f31aca), stringResource(R.string.str_strategy_round_robin_3d7c5a), stringResource(R.string.str_strategy_least_latency_dddcc6)), chainCount, error = updateMessage, onCopyKey = {
                     val clipboard = context.getSystemService(ClipboardManager::class.java)
                     clipboard.setPrimaryClip(ClipData.newPlainText("JH GetWay key", gatewaySecurity.gatewayKey()))
                 }, onToggle = {
@@ -541,12 +543,12 @@ private fun ProviderCard(key: ProviderKey, onToggle: (ProviderKey, Boolean) -> U
     Card(onClick = { onInfo(key) }, colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE6EAF0))) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(38.dp), shape = RoundedCornerShape(10.dp), color = Color(0xFFF0F2FF)) { Icon(Icons.Default.Key, null, tint = Blue, modifier = Modifier.padding(9.dp)) }; Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text(key.name, fontWeight = FontWeight.SemiBold, color = Navy); Text(key.provider, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1) }; StatusPill(key.status) }
-            Row(verticalAlignment = Alignment.CenterVertically) { Text(key.model, color = Navy, fontWeight = FontWeight.Medium); Spacer(Modifier.weight(1f)); Text("Priority ${key.priority}", color = Muted, style = MaterialTheme.typography.labelSmall) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Text(key.model, color = Navy, fontWeight = FontWeight.Medium); Spacer(Modifier.weight(1f)); Text(stringResource(R.string.str_card_priority_926478), color = Muted, style = MaterialTheme.typography.labelSmall) }
             val healthColor = when (key.healthStatus) { "healthy" -> Green; "unhealthy" -> Color(0xFFB91C1C); else -> Muted }
             val healthText = when (key.healthStatus) {
                 "healthy" -> "Healthy · ${key.healthLatencyMs}ms"
                 "unhealthy" -> "Unhealthy${if (key.healthError.isNotBlank()) " · ${key.healthError}" else ""}"
-                else -> "Health not checked yet"
+                else -> stringResource(R.string.str_health_not_checked_d4c95f)
             }
             Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).clip(CircleShape).background(healthColor)); Spacer(Modifier.width(6.dp)); Text(healthText, color = healthColor, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
             Row(verticalAlignment = Alignment.CenterVertically) { Text(key.maskedKey, color = Muted, style = MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); TextButton(onClick = { onTest(key) }) { Text(stringResource(R.string.str_test_640ab2)) }; TextButton(onClick = { onEdit(key) }) { Text(stringResource(R.string.str_edit_530164)) }; Switch(key.status != KeyStatus.DISABLED, { onToggle(key, it) }); IconButton(onClick = { onDelete(key) }) { Icon(Icons.Default.Delete, "Delete ${key.name}", tint = Color(0xFFB91C1C)) } }
@@ -573,29 +575,29 @@ private fun ProviderDetailDialog(provider: StoredProvider, health: ProviderHealt
     val averageLatency = if (logs.isEmpty()) 0 else logs.map { it.latencyMs }.average().toInt()
     val promptTokens = usage.sumOf { it.promptTokens }
     val completionTokens = usage.sumOf { it.completionTokens }
-    val healthStatus = when (health?.status) { "healthy" -> "Healthy"; "unhealthy" -> "Unhealthy"; else -> "No health data yet" }
+    val healthStatus = when (health?.status) { "healthy" -> stringResource(R.string.str_health_healthy_f66c3e); "unhealthy" -> stringResource(R.string.str_health_unhealthy_141907); else -> stringResource(R.string.str_health_no_data_70fb16) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(provider.name) },
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DetailRow("Base URL", provider.baseUrl)
-                DetailRow("Protocol", provider.protocol.name)
-                DetailRow("Model", provider.model)
-                DetailRow("Aliases", provider.aliases.joinToString(", ").ifBlank { "—" })
-                DetailRow("Priority", provider.priority.toString())
-                DetailRow("Status", when { !provider.enabled -> "Disabled"; provider.isCoolingDown -> "Cooling down"; else -> "Enabled" })
-                DetailRow("API key", maskedKey)
+                DetailRow(stringResource(R.string.str_detail_base_url_6d97c7), provider.baseUrl)
+                DetailRow(stringResource(R.string.str_detail_protocol_833f61), provider.protocol.name)
+                DetailRow(stringResource(R.string.str_detail_model_08f524), provider.model)
+                DetailRow(stringResource(R.string.str_detail_aliases_b60a94), provider.aliases.joinToString(", ").ifBlank { "—" })
+                DetailRow(stringResource(R.string.str_detail_priority_f31aca), provider.priority.toString())
+                DetailRow(stringResource(R.string.str_detail_status_9729f9), when { !provider.enabled -> stringResource(R.string.str_status_disabled_6808c3); provider.isCoolingDown -> stringResource(R.string.str_status_cooling_down_4ceade); else -> stringResource(R.string.str_status_enabled_a2e77d) })
+                DetailRow(stringResource(R.string.str_detail_api_key_6325d8), maskedKey)
                 Text(stringResource(R.string.str_health_3703cd), fontWeight = FontWeight.SemiBold, color = Navy)
-                DetailRow("Status", healthStatus)
-                if ((health?.lastLatencyMs ?: 0L) > 0L) DetailRow("Last latency", "${health?.lastLatencyMs}ms")
-                if (health?.lastError.orEmpty().isNotBlank()) DetailRow("Last error", health?.lastError.orEmpty())
-                if ((health?.updatedAt ?: 0L) > 0L) DetailRow("Checked", SimpleDateFormat("MMM d, HH:mm:ss", Locale.US).format(Date(health?.updatedAt ?: 0L)))
+                DetailRow(stringResource(R.string.str_detail_status_9729f9), healthStatus)
+                if ((health?.lastLatencyMs ?: 0L) > 0L) DetailRow(stringResource(R.string.str_detail_last_latency_d52d9e), "${health?.lastLatencyMs}ms")
+                if (health?.lastError.orEmpty().isNotBlank()) DetailRow(stringResource(R.string.str_detail_last_error_18c7dd), health?.lastError.orEmpty())
+                if ((health?.updatedAt ?: 0L) > 0L) DetailRow(stringResource(R.string.str_detail_checked_810874), SimpleDateFormat("MMM d, HH:mm:ss", Locale.US).format(Date(health?.updatedAt ?: 0L)))
                 Text(stringResource(R.string.str_recent_activity_last_100_logge_94fa25), fontWeight = FontWeight.SemiBold, color = Navy)
-                DetailRow("Requests", logs.size.toString())
-                DetailRow("Success rate", "$successRate%")
-                DetailRow("Avg latency", "${averageLatency}ms")
-                DetailRow("Tokens", if (usage.isEmpty()) "No usage recorded yet" else "$promptTokens input · $completionTokens output")
+                DetailRow(stringResource(R.string.str_detail_requests_21430a), logs.size.toString())
+                DetailRow(stringResource(R.string.str_detail_success_rate_948aa3), "$successRate%")
+                DetailRow(stringResource(R.string.str_detail_avg_latency_6ffad6), "${averageLatency}ms")
+                DetailRow(stringResource(R.string.str_detail_tokens_5e84dd), if (usage.isEmpty()) stringResource(R.string.str_detail_no_usage_583f41) else "$promptTokens input · $completionTokens output")
                 Text(stringResource(R.string.str_api_keys_are_never_shown_in_fu_72f5bf), color = Muted, style = MaterialTheme.typography.labelSmall)
             }
         },
@@ -674,13 +676,13 @@ private fun HelpDialog(settings: GatewaySettings, security: GatewaySecurity, onD
                     }
                     1 -> {
                         Text(stringResource(R.string.str_keep_the_gateway_alive_227fb1), fontWeight = FontWeight.Bold, color = Navy)
-                        Text("For $manufacturer and especially Poco/Xiaomi: enable Autostart, set Battery saver to No restrictions, and lock JH GetWay in Recent apps. Then enable Start on boot in Settings.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.str_help_battery_advice_90403d), color = Muted, style = MaterialTheme.typography.bodySmall)
                         Button(onClick = openBatterySettings, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.str_open_battery_settings_2c45a5)) }
                         Text(stringResource(R.string.str_the_gateway_uses_a_foreground_38112d), color = Muted, style = MaterialTheme.typography.bodySmall)
                     }
                     else -> {
                         Text(stringResource(R.string.str_common_fixes_986ece), fontWeight = FontWeight.Bold, color = Navy)
-                        Text("• 401: use the gateway key, not the provider key.\n• Connection refused: start the gateway and check the port.\n• Wi-Fi device cannot connect: enable Wi-Fi open and use the phone IP.\n• All providers unavailable: check provider keys and Routing chain.\n• Port busy: choose another port in Settings, then restart the gateway.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.str_help_troubleshooting_3a4b97), color = Muted, style = MaterialTheme.typography.bodySmall)
                         Text(stringResource(R.string.str_privacy_prompts_responses_and_380f83), color = Muted, style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -699,14 +701,14 @@ private fun BackupDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
     var showPassword by remember { mutableStateOf(false) }
     var exportMode by remember { mutableStateOf(true) }
     var replaceMode by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf("Export your encrypted providers or import a backup file.") }
+    var status by remember { mutableStateOf(stringResource(R.string.str_backup_intro_bbb80c)) }
     val createFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        if (uri == null) { status = "Export cancelled"; return@rememberLauncherForActivityResult }
-        runCatching { context.contentResolver.openOutputStream(uri)?.use { output -> output.write(backupManager.export(providerStore, password.toCharArray())) } ?: error("Could not open selected file") }.onSuccess { status = "Backup exported successfully" }.onFailure { status = "Export failed: ${it.message}" }
+        if (uri == null) { status = stringResource(R.string.str_backup_export_cancelled_2ab62e); return@rememberLauncherForActivityResult }
+        runCatching { context.contentResolver.openOutputStream(uri)?.use { output -> output.write(backupManager.export(providerStore, password.toCharArray())) } ?: error(stringResource(R.string.str_backup_cannot_open_274dea)) }.onSuccess { status = stringResource(R.string.str_backup_exported_e3eeae) }.onFailure { status = stringResource(R.string.str_backup_export_failed_reason_670b95) }
     }
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) { status = "Import cancelled"; return@rememberLauncherForActivityResult }
-        runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Could not read selected file") }.onSuccess { pendingImport = it; exportMode = false; showPassword = true }.onFailure { status = "Import failed: ${it.message}" }
+        if (uri == null) { status = stringResource(R.string.str_backup_import_cancelled_a88478); return@rememberLauncherForActivityResult }
+        runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error(stringResource(R.string.str_backup_cannot_read_c4a17d)) }.onSuccess { pendingImport = it; exportMode = false; showPassword = true }.onFailure { status = stringResource(R.string.str_backup_import_failed_reason_6eaaef) }
     }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.str_backup_restore_a16162)) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -718,7 +720,7 @@ private fun BackupDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
     }, confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) } })
     if (showPassword) AlertDialog(onDismissRequest = { showPassword = false }, title = { Text(if (exportMode) stringResource(R.string.str_set_backup_password_8bcec6) else stringResource(R.string.str_backup_password_d96a60)) }, text = { OutlinedTextField(password, { password = it }, label = { Text(stringResource(R.string.str_password_10_characters_45ec44)) }, visualTransformation = PasswordVisualTransformation(), singleLine = true) }, confirmButton = { Button(enabled = password.length >= 10, onClick = {
         if (exportMode) { showPassword = false; createFile.launch("jh-getway-backup.aigw") }
-        else { runCatching { backupManager.import(providerStore, pendingImport ?: error("No backup selected"), password.toCharArray(), replaceMode) }.onSuccess { status = "Backup imported successfully" }.onFailure { status = "Import failed: wrong password or damaged file" }; showPassword = false; pendingImport = null }
+        else { runCatching { backupManager.import(providerStore, pendingImport ?: error("No backup selected"), password.toCharArray(), replaceMode) }.onSuccess { status = stringResource(R.string.str_backup_imported_0a0269) }.onFailure { status = stringResource(R.string.str_backup_import_failed_428856) }; showPassword = false; pendingImport = null }
     }) { Text(stringResource(R.string.str_continue_2e0262)) } }, dismissButton = { OutlinedButton(onClick = { showPassword = false }) { Text(stringResource(R.string.str_cancel_77dfd2)) } })
 }
 
@@ -785,7 +787,7 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
     val usageEntries = stats.usageEntries()
     val tokensByProvider = usageEntries.groupBy { it.provider.ifBlank { "unknown" } }.map { (name, entries) -> name to entries.sumOf { it.promptTokens + it.completionTokens } }.sortedByDescending { it.second }.take(5)
     val tokensByModel = usageEntries.groupBy { it.model.ifBlank { "unknown" } }.map { (name, entries) -> name to entries.sumOf { it.promptTokens + it.completionTokens } }.sortedByDescending { it.second }.take(5)
-    val requestsByProvider = logs.groupBy { it.provider ?: "No provider" }.map { (name, entries) -> name to entries.size }.sortedByDescending { it.second }.take(5)
+    val requestsByProvider = logs.groupBy { it.provider ?: stringResource(R.string.str_chain_no_provider_532e25) }.map { (name, entries) -> name to entries.size }.sortedByDescending { it.second }.take(5)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(when (section) { 0 -> stringResource(R.string.str_request_logs_f264ea); 1 -> stringResource(R.string.str_usage_0bb186); else -> stringResource(R.string.str_diagnostics_3af227) }) },
@@ -813,14 +815,14 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
                                         val expanded = expandedTime == log.time
                                         Card(onClick = { expandedTime = if (expanded) null else log.time }, colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F6FA))) {
                                             Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                Row { Text(log.provider ?: "No provider", fontWeight = FontWeight.SemiBold, color = Navy); Spacer(Modifier.weight(1f)); Text("HTTP ${log.status}", color = if (log.status in 200..299) Green else Color(0xFFB91C1C), style = MaterialTheme.typography.labelSmall) }
+                                                Row { Text(log.provider ?: stringResource(R.string.str_chain_no_provider_532e25), fontWeight = FontWeight.SemiBold, color = Navy); Spacer(Modifier.weight(1f)); Text("HTTP ${log.status}", color = if (log.status in 200..299) Green else Color(0xFFB91C1C), style = MaterialTheme.typography.labelSmall) }
                                                 Text("${log.endpoint} · ${log.latencyMs}ms", color = Muted, style = MaterialTheme.typography.bodySmall)
                                                 Text(SimpleDateFormat("MMM d, HH:mm:ss", Locale.US).format(Date(log.time)), color = Muted, style = MaterialTheme.typography.labelSmall)
                                                 if (expanded) {
-                                                    DetailRow("Status", "HTTP ${log.status} — ${statusMeaning(log.status)}")
-                                                    DetailRow("Latency", "${log.latencyMs}ms")
-                                                    DetailRow("Model", log.model.ifBlank { "Not recorded" })
-                                                    DetailRow("Provider", log.provider ?: "None")
+                                                    DetailRow(stringResource(R.string.str_detail_status_9729f9), "HTTP ${log.status} — ${statusMeaning(log.status)}")
+                                                    DetailRow(stringResource(R.string.str_detail_latency_b89e54), "${log.latencyMs}ms")
+                                                    DetailRow(stringResource(R.string.str_detail_model_08f524), log.model.ifBlank { stringResource(R.string.str_log_not_recorded_0cebf9) })
+                                                    DetailRow(stringResource(R.string.str_detail_provider_d2cc2e), log.provider ?: stringResource(R.string.str_log_none_509e55))
                                                     Text(stringResource(R.string.str_tap_again_to_collapse_a7bca0), color = Muted, style = MaterialTheme.typography.labelSmall)
                                                 }
                                             }
@@ -835,9 +837,9 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
                             MetricCard(stringResource(R.string.str_total_requests_all_time_fda1db), stats.requestCount().toString(), Icons.Default.Sync, Modifier.fillMaxWidth())
                             MetricCard(stringResource(R.string.str_successful_d7932a), success.toString(), Icons.Default.CheckCircle, Modifier.fillMaxWidth())
                             MetricCard(stringResource(R.string.str_errors_805e86), errors.toString(), Icons.Default.Warning, Modifier.fillMaxWidth())
-                            Text("Recent success rate: $successRate%", color = Muted)
-                            Text("Average latency: ${average}ms (recent)", color = Muted)
-                            Text("Tokens: ${stats.promptTokens()} input · ${stats.completionTokens()} output", color = Muted)
+                            Text(stringResource(R.string.str_usage_recent_success_c413b9), color = Muted)
+                            Text(stringResource(R.string.str_usage_avg_latency_0d53b4), color = Muted)
+                            Text(stringResource(R.string.str_usage_tokens_619e48), color = Muted)
                             Text(stringResource(R.string.str_requests_by_provider_bf849a), fontWeight = FontWeight.SemiBold, color = Navy)
                             if (requestsByProvider.isEmpty()) Text(stringResource(R.string.str_no_provider_data_yet_4cb97e), color = Muted, style = MaterialTheme.typography.bodySmall)
                             else requestsByProvider.forEach { (name, count) -> BreakdownRow(name, count.toString()) }
@@ -857,7 +859,7 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
                             OutlinedButton(onClick = {
                                 val clipboard = context.getSystemService(ClipboardManager::class.java)
                                 clipboard.setPrimaryClip(ClipData.newPlainText("JH GetWay diagnostics", buildDiagnostics(context, stats)))
-                                android.widget.Toast.makeText(context, "Diagnostics copied", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, stringResource(R.string.str_diagnostics_copied_e55f8a), android.widget.Toast.LENGTH_SHORT).show()
                             }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.ContentCopy, null, tint = Blue); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.str_copy_diagnostics_973495)) }
                         }
                     }
@@ -958,7 +960,7 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
     var downloading by remember { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
-    var status by remember { mutableStateOf(if (downloadedFile != null) "A downloaded update is ready to install." else "Tap Check now to look for a new release.") }
+    var status by remember { mutableStateOf(if (downloadedFile != null) stringResource(R.string.str_update_ready_f0ecb9) else stringResource(R.string.str_update_tap_check_571564)) }
     fun checkLatest() {
         if (checking || downloading) return
         checking = true
@@ -982,15 +984,15 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
         title = { Text(stringResource(R.string.str_app_updates_16213f)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Current version ${BuildConfig.VERSION_NAME}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.str_update_current_version_9ae4a9), color = Muted, style = MaterialTheme.typography.bodySmall)
                 Text(status, color = Muted)
                 if (downloading) LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
-                if (downloading) Text("$progress% · Saved inside JH GetWay", color = Muted, style = MaterialTheme.typography.labelSmall)
+                if (downloading) Text(stringResource(R.string.str_update_progress_saved_8cea40), color = Muted, style = MaterialTheme.typography.labelSmall)
                 if ((update != null || downloadedFile != null) && !downloading) TextButton(enabled = !checking, onClick = ::checkLatest) { Text(if (checking) stringResource(R.string.str_checking_820d60) else stringResource(R.string.str_check_again_e18504)) }
                 update?.let { available ->
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F6FA))) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("New version ${available.versionName}", fontWeight = FontWeight.Bold, color = Navy)
+                            Text(stringResource(R.string.str_update_new_version_736c0b), fontWeight = FontWeight.Bold, color = Navy)
                             Text(available.notes, color = Muted, style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -1001,7 +1003,7 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
         confirmButton = {
             when {
                 downloadedFile != null -> Button(onClick = { manager.install(downloadedFile!!) { status = it } }) { Text(stringResource(R.string.str_install_update_8a3695)) }
-                downloading -> Button(enabled = false, onClick = {}) { Text("Downloading $progress%") }
+                downloading -> Button(enabled = false, onClick = {}) { Text(stringResource(R.string.str_update_downloading_b5c780)) }
                 update != null -> Button(onClick = {
                     downloading = true; progress = 0; status = "Downloading inside JH GetWay…"
                     manager.download(update!!, { value -> activity?.runOnUiThread { progress = value } }) { result -> activity?.runOnUiThread { downloading = false; result.onSuccess { downloadedFile = it; progress = 100; status = "Download complete. Tap Install update." }.onFailure { status = "Download failed: ${it.message}" } } }
@@ -1022,5 +1024,5 @@ private fun MoreItem(icon: androidx.compose.ui.graphics.vector.ImageVector, titl
 private fun LogRow(log: RequestLog) {
     val ok = log.status in 200..299
     val color = if (ok) Green else Color(0xFFB91C1C)
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).clip(CircleShape).background(color)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(log.provider ?: "No provider", color = Navy, fontWeight = FontWeight.Medium); Text("${log.endpoint} · ${log.latencyMs}ms${if (log.model.isNotBlank()) " · ${log.model}" else ""}", color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1) }; Text(SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(log.time)), color = Muted, style = MaterialTheme.typography.labelSmall) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).clip(CircleShape).background(color)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(log.provider ?: stringResource(R.string.str_chain_no_provider_532e25), color = Navy, fontWeight = FontWeight.Medium); Text("${log.endpoint} · ${log.latencyMs}ms${if (log.model.isNotBlank()) " · ${log.model}" else ""}", color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1) }; Text(SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(log.time)), color = Muted, style = MaterialTheme.typography.labelSmall) }
 }

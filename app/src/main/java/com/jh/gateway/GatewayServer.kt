@@ -87,7 +87,7 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
                 if (!call.authorized()) return@post
                 try {
                     val body = call.receiveValidatedBody() ?: return@post
-                    val translated = translateOrError(body, ClientProtocol.ANTHROPIC) ?: return@post
+                    val translated = call.translateOrError(body, ClientProtocol.ANTHROPIC) ?: return@post
                     if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
                         call.respondOutputStream(ContentType.Text.EventStream) {
                             val started = System.currentTimeMillis()
@@ -107,7 +107,7 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
                 if (!call.authorized()) return@post
                 try {
                     val body = call.receiveValidatedBody() ?: return@post
-                    val translated = translateOrError(body, ClientProtocol.RESPONSES) ?: return@post
+                    val translated = call.translateOrError(body, ClientProtocol.RESPONSES) ?: return@post
                     if (Regex("\\\"stream\\\"\\s*:\\s*true").containsMatchIn(body)) {
                         call.respondOutputStream(ContentType.Text.EventStream) {
                             val started = System.currentTimeMillis()
