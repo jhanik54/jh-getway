@@ -203,6 +203,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var showMonitoringDialog by remember { mutableStateOf(false) }
     var showBackupDialog by remember { mutableStateOf(false) }
     var showHelpDialog by remember { mutableStateOf(false) }
+    var showRegenerateDialog by remember { mutableStateOf(false) }
     var editingProvider by remember { mutableStateOf<StoredProvider?>(null) }
     var detailProvider by remember { mutableStateOf<StoredProvider?>(null) }
     var providerMessage by remember { mutableStateOf("") }
@@ -264,6 +265,9 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                 0 -> HomeScreen(Modifier.padding(padding), running, gatewaySecurity.maskedKey(), gatewaySettings.port, gatewaySettings.wifiMode, keys, strategyLabel(gatewaySettings.routingStrategy, stringResource(R.string.str_detail_priority_f31aca), stringResource(R.string.str_strategy_round_robin_3d7c5a), stringResource(R.string.str_strategy_least_latency_dddcc6)), chainCount, error = updateMessage, onCopyKey = {
                     val clipboard = context.getSystemService(ClipboardManager::class.java)
                     clipboard.setPrimaryClip(ClipData.newPlainText("JH GetWay key", gatewaySecurity.gatewayKey()))
+                }, onRegenerateKey = {
+                    // Rotating the key invalidates the old one on every client.
+                    if (!showRegenerateDialog) showRegenerateDialog = true
                 }, onToggle = {
                     running = !running
                     onRequestNotifications()
@@ -298,6 +302,21 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         if (showMonitoringDialog) MonitoringDialog(GatewayStats(context), onDismiss = { showMonitoringDialog = false })
         if (showBackupDialog) BackupDialog(providerStore, onDismiss = { showBackupDialog = false })
         if (showHelpDialog) HelpDialog(gatewaySettings, gatewaySecurity, onDismiss = { showHelpDialog = false })
+        if (showRegenerateDialog) {
+            AlertDialog(
+                onDismissRequest = { showRegenerateDialog = false },
+                title = { Text(stringResource(R.string.str_regenerate_key_title_4c8e21), fontWeight = FontWeight.Bold) },
+                text = { Text(stringResource(R.string.str_regenerate_key_body_a1f7d3), color = Muted) },
+                confirmButton = {
+                    Button(onClick = {
+                        gatewaySecurity.regenerate()
+                        showRegenerateDialog = false
+                        updateMessage = context.getString(R.string.str_regenerate_key_done_5e3b9c)
+                    }) { Text(stringResource(R.string.str_regenerate_confirm_7d1a86)) }
+                },
+                dismissButton = { OutlinedButton(onClick = { showRegenerateDialog = false }) { Text(stringResource(R.string.str_cancel_77dfd2)) } }
+            )
+        }
         if (!splashDone) SplashOverlay(darkTheme = darkTheme, onDone = { splashDone = true })
         }
     }
@@ -385,7 +404,7 @@ private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: Strin
 }
 
 @Composable
-private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String, port: Int, wifiMode: Boolean, keys: List<ProviderKey>, strategy: String, chainCount: Int, error: String, onCopyKey: () -> Unit, onToggle: () -> Unit, onViewChain: () -> Unit, onViewLogs: () -> Unit) {
+private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String, port: Int, wifiMode: Boolean, keys: List<ProviderKey>, strategy: String, chainCount: Int, error: String, onCopyKey: () -> Unit, onRegenerateKey: () -> Unit, onToggle: () -> Unit, onViewChain: () -> Unit, onViewLogs: () -> Unit) {
     val context = LocalContext.current
     val stats = remember { GatewayStats(context) }
     var statsTick by remember { mutableIntStateOf(0) }
@@ -401,7 +420,7 @@ private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String,
             Spacer(Modifier.height(4.dp))
         }
         item { StatusCard(running, port, wifiMode, error, onToggle) }
-        item { GatewayKeyCard(gatewayKey, onCopyKey) }
+        item { GatewayKeyCard(gatewayKey, onCopyKey, onRegenerateKey) }
         item { MetricRow(requests, readyKeys, keys.size) }
         item { SectionTitle(stringResource(R.string.str_active_route_9ad8bd), stringResource(R.string.str_view_chain_43303f), onViewChain) }
         item { RouteCard(strategy, chainCount) }
@@ -416,13 +435,20 @@ private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String,
 }
 
 @Composable
-private fun GatewayKeyCard(key: String, onCopy: () -> Unit) {
+private fun GatewayKeyCard(key: String, onCopy: () -> Unit, onRegenerate: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F7FF)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE5E2FF))) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(Modifier.size(38.dp), shape = RoundedCornerShape(11.dp), color = Color(0xFFE9EDFF)) { Icon(Icons.Default.Security, null, tint = Blue, modifier = Modifier.padding(9.dp)) }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_gateway_key_c7864a), fontWeight = FontWeight.SemiBold, color = Navy); Text(key, color = Muted, style = MaterialTheme.typography.bodySmall); Text(stringResource(R.string.str_required_by_opencode_and_other_001a4a), color = Muted, style = MaterialTheme.typography.labelSmall) }
-            IconButton(onClick = onCopy) { Icon(Icons.Default.ContentCopy, stringResource(R.string.str_copy_gateway_key_824df3), tint = Blue) }
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(Modifier.size(38.dp), shape = RoundedCornerShape(11.dp), color = Color(0xFFE9EDFF)) { Icon(Icons.Default.Security, null, tint = Blue, modifier = Modifier.padding(9.dp)) }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_gateway_key_c7864a), fontWeight = FontWeight.SemiBold, color = Navy); Text(key, color = Muted, style = MaterialTheme.typography.bodySmall); Text(stringResource(R.string.str_required_by_opencode_and_other_001a4a), color = Muted, style = MaterialTheme.typography.labelSmall) }
+                IconButton(onClick = onCopy) { Icon(Icons.Default.ContentCopy, stringResource(R.string.str_copy_gateway_key_824df3), tint = Blue) }
+            }
+            TextButton(onClick = onRegenerate, modifier = Modifier.align(Alignment.End)) {
+                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.str_regenerate_gateway_key_6b2f84), style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }
@@ -701,14 +727,15 @@ private fun BackupDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
     var showPassword by remember { mutableStateOf(false) }
     var exportMode by remember { mutableStateOf(true) }
     var replaceMode by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf(stringResource(R.string.str_backup_intro_bbb80c)) }
+    val backupIntro = stringResource(R.string.str_backup_intro_bbb80c)
+    var status by remember { mutableStateOf(backupIntro) }
     val createFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        if (uri == null) { status = stringResource(R.string.str_backup_export_cancelled_2ab62e); return@rememberLauncherForActivityResult }
-        runCatching { context.contentResolver.openOutputStream(uri)?.use { output -> output.write(backupManager.export(providerStore, password.toCharArray())) } ?: error(stringResource(R.string.str_backup_cannot_open_274dea)) }.onSuccess { status = stringResource(R.string.str_backup_exported_e3eeae) }.onFailure { status = stringResource(R.string.str_backup_export_failed_reason_670b95) }
+        if (uri == null) { status = context.getString(R.string.str_backup_export_cancelled_2ab62e); return@rememberLauncherForActivityResult }
+        runCatching { context.contentResolver.openOutputStream(uri)?.use { output -> output.write(backupManager.export(providerStore, password.toCharArray())) } ?: error(context.getString(R.string.str_backup_cannot_open_274dea)) }.onSuccess { status = context.getString(R.string.str_backup_exported_e3eeae) }.onFailure { status = context.getString(R.string.str_backup_export_failed_reason_670b95) }
     }
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) { status = stringResource(R.string.str_backup_import_cancelled_a88478); return@rememberLauncherForActivityResult }
-        runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error(stringResource(R.string.str_backup_cannot_read_c4a17d)) }.onSuccess { pendingImport = it; exportMode = false; showPassword = true }.onFailure { status = stringResource(R.string.str_backup_import_failed_reason_6eaaef) }
+        if (uri == null) { status = context.getString(R.string.str_backup_import_cancelled_a88478); return@rememberLauncherForActivityResult }
+        runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error(context.getString(R.string.str_backup_cannot_read_c4a17d)) }.onSuccess { pendingImport = it; exportMode = false; showPassword = true }.onFailure { status = context.getString(R.string.str_backup_import_failed_reason_6eaaef) }
     }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.str_backup_restore_a16162)) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -720,7 +747,7 @@ private fun BackupDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
     }, confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) } })
     if (showPassword) AlertDialog(onDismissRequest = { showPassword = false }, title = { Text(if (exportMode) stringResource(R.string.str_set_backup_password_8bcec6) else stringResource(R.string.str_backup_password_d96a60)) }, text = { OutlinedTextField(password, { password = it }, label = { Text(stringResource(R.string.str_password_10_characters_45ec44)) }, visualTransformation = PasswordVisualTransformation(), singleLine = true) }, confirmButton = { Button(enabled = password.length >= 10, onClick = {
         if (exportMode) { showPassword = false; createFile.launch("jh-getway-backup.aigw") }
-        else { runCatching { backupManager.import(providerStore, pendingImport ?: error("No backup selected"), password.toCharArray(), replaceMode) }.onSuccess { status = stringResource(R.string.str_backup_imported_0a0269) }.onFailure { status = stringResource(R.string.str_backup_import_failed_428856) }; showPassword = false; pendingImport = null }
+        else { runCatching { backupManager.import(providerStore, pendingImport ?: error("No backup selected"), password.toCharArray(), replaceMode) }.onSuccess { status = context.getString(R.string.str_backup_imported_0a0269) }.onFailure { status = context.getString(R.string.str_backup_import_failed_428856) }; showPassword = false; pendingImport = null }
     }) { Text(stringResource(R.string.str_continue_2e0262)) } }, dismissButton = { OutlinedButton(onClick = { showPassword = false }) { Text(stringResource(R.string.str_cancel_77dfd2)) } })
 }
 
@@ -859,7 +886,7 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
                             OutlinedButton(onClick = {
                                 val clipboard = context.getSystemService(ClipboardManager::class.java)
                                 clipboard.setPrimaryClip(ClipData.newPlainText("JH GetWay diagnostics", buildDiagnostics(context, stats)))
-                                android.widget.Toast.makeText(context, stringResource(R.string.str_diagnostics_copied_e55f8a), android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, context.getString(R.string.str_diagnostics_copied_e55f8a), android.widget.Toast.LENGTH_SHORT).show()
                             }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.ContentCopy, null, tint = Blue); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.str_copy_diagnostics_973495)) }
                         }
                     }
@@ -960,7 +987,8 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
     var downloading by remember { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
-    var status by remember { mutableStateOf(if (downloadedFile != null) stringResource(R.string.str_update_ready_f0ecb9) else stringResource(R.string.str_update_tap_check_571564)) }
+    val updateHint = if (downloadedFile != null) stringResource(R.string.str_update_ready_f0ecb9) else stringResource(R.string.str_update_tap_check_571564)
+    var status by remember { mutableStateOf(updateHint) }
     fun checkLatest() {
         if (checking || downloading) return
         checking = true

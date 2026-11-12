@@ -221,4 +221,9 @@
     <string name="str_testing_provider_8d3a16">পরীক্ষা করা হচ্ছে %1$s…</string>
     <string name="str_test_ok_models_2c7b45">%1$s: সংযোগ সফল (%2$dটি মডেল)</string>
     <string name="str_test_failed_provider_9e4d18">%1$s: %2$s</string>
+    <string name="str_regenerate_gateway_key_6b2f84">নতুন key তৈরি করুন</string>
+    <string name="str_regenerate_key_title_4c8e21">নতুন gateway key তৈরি করবেন?</string>
+    <string name="str_regenerate_key_body_a1f7d3">বর্তমান key সঙ্গে সঙ্গে কাজ করবে না। এই gateway-এর সাথে যুক্ত প্রতিটি app-কে নতুন key দিয়ে আপডেট করতে হবে।</string>
+    <string name="str_regenerate_confirm_7d1a86">তৈরি করুন</string>
+    <string name="str_regenerate_key_done_5e3b9c">নতুন gateway key তৈরি হয়েছে। আপনার app গুলোতে নতুন key দিন।</string>
 </resources>

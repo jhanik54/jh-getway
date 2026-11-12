@@ -225,4 +225,9 @@
     <string name="str_testing_provider_8d3a16">Testing %1$s…</string>
     <string name="str_test_ok_models_2c7b45">%1$s: connection OK (%2$d models)</string>
     <string name="str_test_failed_provider_9e4d18">%1$s: %2$s</string>
+    <string name="str_regenerate_gateway_key_6b2f84">Regenerate key</string>
+    <string name="str_regenerate_key_title_4c8e21">Regenerate gateway key?</string>
+    <string name="str_regenerate_key_body_a1f7d3">The current key stops working immediately. Every app that talks to this gateway must be updated with the new key.</string>
+    <string name="str_regenerate_confirm_7d1a86">Regenerate</string>
+    <string name="str_regenerate_key_done_5e3b9c">A new gateway key was generated. Update your apps with the new key.</string>
 </resources>
