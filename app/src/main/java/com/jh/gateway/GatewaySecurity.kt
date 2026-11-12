@@ -48,6 +48,7 @@ class GatewaySecurity(context: Context) {
 
     @Synchronized
     fun allowRequest(remoteIp: String, maxPerMinute: Int = 120): Boolean {
+        cleanupBlockedEvents()
         val now = System.currentTimeMillis()
         val current = requestWindows[remoteIp]
         if (current == null || now - current.startedAt >= 60_000L) { requestWindows[remoteIp] = RateWindow(now, 1); return true }
@@ -61,6 +62,14 @@ class GatewaySecurity(context: Context) {
         val fresh = createGatewayKey()
         prefs.edit().putString(GATEWAY_KEY, encrypt(fresh)).apply()
         return fresh
+    }
+
+    /** Removes expired security blocks so the blocked-key map does not grow unbounded. */
+    @Synchronized
+    fun cleanupBlockedEvents() {
+        val now = System.currentTimeMillis()
+        val blockedKeys = prefs.all.keys.filter { it.startsWith("blocked_") && (prefs.all[it] as? Long ?: 0L) < now }
+        if (blockedKeys.isNotEmpty()) blockedKeys.forEach { prefs.edit().remove(it).apply() }
     }
 
     private fun isBlocked(ip: String): Boolean = prefs.getLong("blocked_$ip", 0L) > System.currentTimeMillis()

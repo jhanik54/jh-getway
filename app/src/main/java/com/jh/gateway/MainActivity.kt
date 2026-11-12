@@ -177,6 +177,18 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     val gatewaySettings = remember { GatewaySettings(context) }
     val gatewayState = remember { GatewayStateStore(context) }
     LaunchedEffect(Unit) { running = gatewayState.state == GatewayRunState.RUNNING }
+    LaunchedEffect(running) {
+        if (running && gatewayState.state != GatewayRunState.RUNNING) {
+            // User toggled start; wait briefly then re-read actual state from service.
+            running = gatewayState.state == GatewayRunState.RUNNING
+        }
+    }
+    LaunchedEffect(gatewayState.state) {
+        running = gatewayState.state == GatewayRunState.RUNNING
+        if (gatewayState.state == GatewayRunState.ERROR) {
+            updateMessage = gatewayState.error.ifBlank { "Gateway failed to start" }
+        }
+    }
     var theme by remember { mutableStateOf(gatewaySettings.theme) }
     val tabs = listOf("Home", "Providers", "More")
 
@@ -210,7 +222,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
             }
         ) { padding ->
             when (tab) {
-                0 -> HomeScreen(Modifier.padding(padding), running, gatewaySecurity.maskedKey(), gatewaySettings.port, gatewaySettings.wifiMode, onCopyKey = {
+                0 -> HomeScreen(Modifier.padding(padding), running, gatewaySecurity.maskedKey(), gatewaySettings.port, gatewaySettings.wifiMode, error = updateMessage, onCopyKey = {
                     val clipboard = context.getSystemService(ClipboardManager::class.java)
                     clipboard.setPrimaryClip(ClipData.newPlainText("JH GetWay key", gatewaySecurity.gatewayKey()))
                 }, onToggle = {
@@ -310,7 +322,7 @@ private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: Strin
 }
 
 @Composable
-private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String, port: Int, wifiMode: Boolean, onCopyKey: () -> Unit, onToggle: () -> Unit) {
+private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String, port: Int, wifiMode: Boolean, error: String, onCopyKey: () -> Unit, onToggle: () -> Unit) {
     LazyColumn(modifier.fillMaxSize().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Spacer(Modifier.height(8.dp))
@@ -318,7 +330,7 @@ private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String,
             Text("Your AI traffic, simplified.", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy)
             Spacer(Modifier.height(4.dp))
         }
-         item { StatusCard(running, port, wifiMode, onToggle) }
+         item { StatusCard(running, port, wifiMode, error, onToggle) }
         item { GatewayKeyCard(gatewayKey, onCopyKey) }
         item { MetricRow() }
         item { SectionTitle("Active route", "View chain") }
@@ -342,7 +354,7 @@ private fun GatewayKeyCard(key: String, onCopy: () -> Unit) {
 }
 
 @Composable
-private fun StatusCard(running: Boolean, port: Int, wifiMode: Boolean, onToggle: () -> Unit) {
+private fun StatusCard(running: Boolean, port: Int, wifiMode: Boolean, error: String, onToggle: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = if (running) Navy else Color(0xFF29344B)), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -359,6 +371,10 @@ private fun StatusCard(running: Boolean, port: Int, wifiMode: Boolean, onToggle:
                 Button(onClick = onToggle, colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Navy)) {
                     Text(if (running) "Stop" else "Start gateway")
                 }
+            }
+            if (error.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(error, color = Color(0xFFFF9999), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -608,6 +624,7 @@ private fun SettingsDialog(settings: GatewaySettings, onSecurityChanged: () -> U
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(routingStrategy == "PRIORITY", { routingStrategy = "PRIORITY" }, label = { Text("Priority") })
                 FilterChip(routingStrategy == "ROUND_ROBIN", { routingStrategy = "ROUND_ROBIN" }, label = { Text("Round Robin") })
+                FilterChip(routingStrategy == "LEAST_LATENCY", { routingStrategy = "LEAST_LATENCY" }, label = { Text("Least latency") })
             }
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Sticky session"); Text("Keep a conversation on the same provider until TTL expires", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(stickySession, { stickySession = it }) }
             if (stickySession) OutlinedTextField(stickyTtl, { stickyTtl = it.filter(Char::isDigit) }, label = { Text("Sticky TTL (seconds)") }, singleLine = true)

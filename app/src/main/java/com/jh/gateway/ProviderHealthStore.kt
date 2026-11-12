@@ -19,7 +19,8 @@ class ProviderHealthStore(private val context: Context) {
     @Synchronized
     fun recordFailure(provider: StoredProvider, failure: ProviderFailure, status: Int) {
         val message = "${failure.name.lowercase().replace('_', ' ')} (HTTP $status)"
-        save(provider, "unhealthy", message, 0L)
+        val preservedLatency = get(provider.id)?.lastLatencyMs ?: 0L
+        save(provider, "unhealthy", message, preservedLatency)
         notifyOnce(provider.name, message)
     }
 

@@ -20,9 +20,13 @@ class ChainStore(context: Context) {
             }
         }.getOrDefault(emptyList())
         val known = providers.map { it.id }.toSet()
-        val filtered = saved.filter { it.id in known }
-        val missing = providers.filter { provider -> filtered.none { it.id == provider.id } }.map { ChainEntry(it.id, it.name, it.model, ChainTier.BEST) }
-        return (filtered + missing).ifEmpty { listOf(ChainEntry("empty", "No provider", "Add a provider first", ChainTier.BASIC, false)) }
+        val filtered = saved.filter { it.id in known && it.enabled }
+        val missing = providers.filter { provider -> filtered.none { it.id == provider.id } }.map { provider ->
+            if (provider.enabled) ChainEntry(provider.id, provider.name, provider.model, ChainTier.BEST, provider.enabled)
+            else ChainEntry(provider.id, provider.name, provider.model, ChainTier.BEST, false)
+        }
+        val result = (filtered + missing).filter { it.id != "empty" && it.id in known }
+        return if (result.isEmpty()) listOf(ChainEntry("empty", "No provider", "Add a provider first", ChainTier.BASIC, false)) else result
     }
 
     @Synchronized

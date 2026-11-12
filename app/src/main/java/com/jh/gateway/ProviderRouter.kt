@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-enum class ProviderFailure { AUTHENTICATION, RATE_LIMIT, INVALID_REQUEST, INVALID_MODEL, TIMEOUT, NETWORK, SERVER, UNKNOWN }
+enum class ProviderFailure { AUTHENTICATION, RATE_LIMIT, INVALID_REQUEST, INVALID_MODEL, TIMEOUT, NETWORK, SERVER, REDIRECT, UNKNOWN }
 data class ForwardResult(val status: Int, val body: String, val provider: String? = null, val retryAfterMillis: Long? = null, val failure: ProviderFailure? = null)
 
 class ProviderRouter(private val store: ProviderStore, private val chainStore: ChainStore, private val settings: GatewaySettings, private val health: ProviderHealthStore? = null) {
@@ -47,6 +47,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
         if (candidates.isEmpty()) return ForwardResult(503, "{\"error\":{\"message\":\"All providers are unavailable\",\"type\":\"gateway_unavailable\"}}")
         for (provider in candidates) {
             val key = store.apiKey(provider) ?: continue
+            val started = System.currentTimeMillis()
             val connectionResult = runCatching { open(provider, key, ProtocolAdapter.toProvider(body, provider)) }
             if (connectionResult.isFailure) { store.markCooldown(provider, 30_000); continue }
             val connection = connectionResult.getOrThrow()
@@ -62,7 +63,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
                         }
                     } }
                     if (settings.stickySession) sessionKey(body)?.let { sticky[it] = StickyRoute(provider.id, System.currentTimeMillis() + settings.stickyTtlSeconds * 1_000L) }
-                    health?.recordSuccess(provider, 0L)
+                    health?.recordSuccess(provider, System.currentTimeMillis() - started)
                     return ForwardResult(status, "", provider.name)
                 } finally { connection.disconnect() }
             }
@@ -89,13 +90,29 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             else sticky.remove(key)
         }
         if (sorted.size < 2) return sorted
-        if (settings.routingStrategy == "PRIORITY") return sorted
+        val strategy = settings.routingStrategy.uppercase()
         val bestTier = chain[sorted.first().id]?.second ?: 0
         val sameTier = sorted.filter { (chain[it.id]?.second ?: 0) == bestTier }
-        if (sameTier.size < 2) return sorted
-        val offset = (roundRobin.getOrPut(requestedModel.ifBlank { "auto" }) { AtomicInteger(0) }.getAndIncrement() and Int.MAX_VALUE) % sameTier.size
-        val rotated = sameTier.drop(offset) + sameTier.take(offset)
-        return rotated + sorted.filterNot { it.id in sameTier.map { entry -> entry.id }.toSet() }
+        val rest = sorted.filterNot { entry -> sameTier.any { it.id == entry.id } }
+        return when (strategy) {
+            "PRIORITY" -> sorted
+            "LEAST_LATENCY" -> {
+                val rotated = sameTier.sortedBy { health?.get(it.id)?.lastLatencyMs ?: Long.MAX_VALUE }
+                rotated + rest
+            }
+            else -> {
+                val offset = (roundRobin.getOrPut(requestedModel.ifBlank { "auto" }) { AtomicInteger(0) }.getAndIncrement() and Int.MAX_VALUE) % sameTier.size
+                val rotated = sameTier.drop(offset) + sameTier.take(offset)
+                rotated + rest
+            }
+        }
+    }
+
+    /** Returns the ordered candidate list for [requestedModel] without making any network requests. */
+    fun simulateRoute(requestedModel: String = "auto"): List<StoredProvider> {
+        val safeModel = requestedModel.ifBlank { "auto" }
+        val body = """{"model":"${safeModel.replace("\\", "\\\\").replace("\"", "\\\"")}","messages":[]}"""
+        return eligible(safeModel, body)
     }
 
     private fun sessionKey(body: String): String? = runCatching {
@@ -120,6 +137,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
             connectTimeout = settings.connectTimeoutMs
             readTimeout = settings.readTimeoutMs
             doOutput = true
+            instanceFollowRedirects = false // Security: never auto-follow redirects (SSRF protection)
             if (provider.protocol == ProviderProtocol.ANTHROPIC) { setRequestProperty("x-api-key", key); setRequestProperty("anthropic-version", "2023-06-01") } else setRequestProperty("Authorization", "Bearer $key")
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Accept", "application/json")
@@ -130,6 +148,7 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
 
     private fun endpoint(base: String, protocol: ProviderProtocol): String = if (protocol == ProviderProtocol.ANTHROPIC) { if (base.endsWith("/v1")) "$base/messages" else "$base/v1/messages" } else if (base.endsWith("/v1")) "$base/chat/completions" else "$base/v1/chat/completions"
     private fun classify(status: Int): ProviderFailure? = when (status) {
+        301, 302, 303, 307, 308 -> ProviderFailure.REDIRECT
         401, 403 -> ProviderFailure.AUTHENTICATION
         400, 413, 422 -> ProviderFailure.INVALID_REQUEST
         404 -> ProviderFailure.INVALID_MODEL

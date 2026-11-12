@@ -19,10 +19,10 @@ This roadmap orders the supplied technical audit and legal/splash specifications
 
 ## Phase 2 — Provider registry and routing engine
 
-- UUID provider IDs and complete CRUD.
-- Edit/replace/delete/test provider credentials with cleanup.
-- Model registry, aliases, capabilities, and deterministic `/v1/models`.
-- Persistent sticky-session TTL, selectable strategies, and route simulation.
+- UUID provider IDs and complete CRUD. — implemented (ProviderStore IDs, get/add/update/remove, chain/health cleanup).
+- Edit/replace/delete/test provider credentials with cleanup. — implemented (update validates duplicates; remove purges stored key and health records).
+- Model registry, aliases, capabilities, and deterministic `/v1/models`. — implemented (ModelRegistry, capability detection, sorted unique `/v1/models` response).
+- Persistent sticky-session TTL, selectable strategies, and route simulation. — implemented (GatewaySettings sticky TTL persisted; PRIORITY/ROUND_ROBIN/LEAST_LATENCY selectable; `POST /v1/gateway/simulate` returns ordered candidates without network calls).
 
 ## Phase 3 — Protocol conformance
 

@@ -31,13 +31,23 @@ class GatewayServer(private val store: ProviderStore, private val security: Gate
             }
             get("/v1/models") {
                 if (!call.authorized()) return@get
-                val models = store.list().filter { it.enabled }.flatMap { provider -> (listOf(provider.model) + provider.aliases).distinct().map { model -> "{\"id\":\"${escape(model)}\",\"object\":\"model\",\"owned_by\":\"${escape(provider.name)}\"}" } }.distinct().joinToString(",")
+                val models = ModelRegistry.modelsFor(store.list()).joinToString(",") { info -> "{\"id\":\"${escape(info.id)}\",\"object\":\"model\",\"created\":1_700_000_000,\"owned_by\":\"jh-getway\",\"capabilities\":[${info.capabilities.joinToString(",") { "\"${escape(it)}\"" }}]}" }
                 call.respondText("{\"object\":\"list\",\"data\":[$models]}", ContentType.Application.Json)
             }
             get("/v1/gateway/logs") {
                 if (!call.authorized()) return@get
                 val data = stats.recent().joinToString(",") { "{\"time\":${it.time},\"endpoint\":\"${escape(it.endpoint)}\",\"status\":${it.status},\"provider\":\"${escape(it.provider ?: "")}\",\"latencyMs\":${it.latencyMs}}" }
                 call.respondText("{\"object\":\"list\",\"data\":[$data]}", ContentType.Application.Json)
+            }
+            post("/v1/gateway/simulate") {
+                if (!call.authorized()) return@post
+                try {
+                    val body = call.receiveValidatedBody() ?: return@post
+                    val requested = runCatching { JSONObject(body).optString("model", "auto") }.getOrDefault("auto").ifBlank { "auto" }
+                    val route = router.simulateRoute(requested)
+                    val data = route.joinToString(",") { provider -> "{\"id\":\"${escape(provider.id)}\",\"name\":\"${escape(provider.name)}\",\"model\":\"${escape(provider.model)}\",\"priority\":${provider.priority},\"enabled\":${provider.enabled}}" }
+                    call.respondText("{\"model\":\"${escape(requested)}\",\"strategy\":\"${escape(settings.routingStrategy)}\",\"providers\":[$data]}", ContentType.Application.Json)
+                } finally { call.releasePermit() }
             }
             post("/v1/chat/completions") {
                 if (!call.authorized()) return@post

@@ -34,6 +34,7 @@ data class StoredProvider(
 
 /** Stores provider metadata plainly, but encrypts every API key with Android Keystore. */
 class ProviderStore(context: Context) {
+    private val appContext = context.applicationContext
     private val prefs: SharedPreferences = context.getSharedPreferences("gateway_providers", Context.MODE_PRIVATE)
     private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 
@@ -79,6 +80,9 @@ class ProviderStore(context: Context) {
     fun setEnabled(id: String, enabled: Boolean) { save(list().map { if (it.id == id) it.copy(enabled = enabled) else it }) }
 
     @Synchronized
+    fun get(id: String): StoredProvider? = list().firstOrNull { it.id == id }
+
+    @Synchronized
     fun update(id: String, name: String, baseUrl: String, model: String, apiKey: String, protocol: ProviderProtocol, aliases: List<String> = emptyList()) {
         require(name.trim().isNotBlank()) { "Provider name is required" }
         val normalizedUrl = baseUrl.trim().trimEnd('/')
@@ -96,6 +100,12 @@ class ProviderStore(context: Context) {
     fun remove(id: String) {
         save(list().filterNot { it.id == id })
         prefs.edit().remove(keyName(id)).apply()
+        try {
+            appContext.getSharedPreferences("provider_health", Context.MODE_PRIVATE).edit().remove("health_$id").apply()
+            appContext.getSharedPreferences("gateway_stats", Context.MODE_PRIVATE).edit().remove("health_$id").apply()
+        } catch (_: Throwable) {
+            // Best effort cleanup; provider is already removed from the registry.
+        }
     }
 
     @Synchronized
