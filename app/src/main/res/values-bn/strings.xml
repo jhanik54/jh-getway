@@ -209,7 +209,7 @@
     <string name="str_update_progress_saved_8cea40">$progress% · JH GetWay-এর ভিতরে সংরক্ষিত</string>
     <string name="str_update_ready_f0ecb9">ডাউনলোড করা আপডেট ইনস্টল করার জন্য প্রস্তুত।</string>
     <string name="str_update_saved_inside_966493">JH GetWay-এর ভিতরে সংরক্ষিত</string>
-    <string name="str_update_tap_check_571564">নতুন রিলিজ দেখতে 'Check now' চাপুন।</string>
+    <string name="str_update_tap_check_571564">নতুন রিলিজ দেখতে \'Check now\' চাপুন।</string>
     <string name="str_usage_avg_latency_0d53b4">গড় লেটেন্সি: ${average}ms (সাম্প্রতিক)</string>
     <string name="str_usage_recent_success_c413b9">সাম্প্রতিক সফলতার হার: $successRate%</string>
     <string name="str_usage_tokens_619e48">টোকেন: ${stats.promptTokens()} ইনপুট · ${stats.completionTokens()} আউটপুট</string>
@@ -218,4 +218,7 @@
     <string name="str_detail_provider_d2cc2e">Provider</string>
     <string name="str_help_troubleshooting_3a4b97">• 401: provider key নয়, gateway key ব্যবহার করুন।\n• Connection refused: গেটওয়ে চালু করুন এবং port যাচাই করুন।\n• Wi-Fi ডিভাইসে সংযোগ হচ্ছে না: Wi-Fi খুলে দিন এবং ফোনের IP ব্যবহার করুন।\n• সব provider unavailable: provider key ও Routing chain যাচাই করুন।\n• Port busy: Settings-এ অন্য port বেছে নিয়ে গেটওয়ে restart করুন।</string>
     <string name="str_help_battery_advice_90403d">$manufacturer এবং বিশেষ করে Poco/Xiaomi-র জন্য: Autostart চালু করুন, Battery saver-কে No restrictions করুন, এবং Recent apps-এ JH GetWay লক করুন। এরপর Settings-এ Start on boot চালু করুন।</string>
+    <string name="str_testing_provider_8d3a16">পরীক্ষা করা হচ্ছে %1$s…</string>
+    <string name="str_test_ok_models_2c7b45">%1$s: সংযোগ সফল (%2$dটি মডেল)</string>
+    <string name="str_test_failed_provider_9e4d18">%1$s: %2$s</string>
 </resources>

@@ -222,4 +222,7 @@
 • All providers unavailable: check provider keys and Routing chain.
 • Port busy: choose another port in Settings, then restart the gateway.</string>
     <string name="str_help_battery_advice_90403d">For $manufacturer and especially Poco/Xiaomi: enable Autostart, set Battery saver to No restrictions, and lock JH GetWay in Recent apps. Then enable Start on boot in Settings.</string>
+    <string name="str_testing_provider_8d3a16">Testing %1$s…</string>
+    <string name="str_test_ok_models_2c7b45">%1$s: connection OK (%2$d models)</string>
+    <string name="str_test_failed_provider_9e4d18">%1$s: %2$s</string>
 </resources>
