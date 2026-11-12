@@ -21,19 +21,35 @@ android {
         versionName = "0.5.2"
     }
 
+    val signingPassword = System.getenv("JH_SIGNING_PASSWORD")
     val stableStore = file(System.getenv("JH_SIGNING_STORE") ?: "${System.getProperty("user.home")}/.android/jh-getway-release.keystore")
     signingConfigs {
         create("stable") {
             storeFile = stableStore
-            storePassword = System.getenv("JH_SIGNING_PASSWORD") ?: "changeit"
-            keyAlias = "jh_gateway"
-            keyPassword = System.getenv("JH_SIGNING_PASSWORD") ?: "changeit"
+            // No fallback password. Sign only when the secret is present; otherwise the
+            // build falls back to the default (debug) signing so local builds still work,
+            // and the release job in CI fails APK verification if the secret is missing.
+            if (signingPassword != null) {
+                storePassword = signingPassword
+                keyAlias = "jh_gateway"
+                keyPassword = signingPassword
+            }
         }
     }
 
     buildTypes {
         getByName("debug") {
-            if (stableStore.exists()) signingConfig = signingConfigs.getByName("stable")
+            if (stableStore.exists() && signingPassword != null) signingConfig = signingConfigs.getByName("stable")
+        }
+        getByName("release") {
+            // Shrink/minify policy: disabled until it can be verified on a device.
+            // R8 cannot be validated from this environment (no Android toolchain/devices),
+            // and an unverified minify would risk shipping a broken release. When device
+            // verification is available, enable minifyEnabled/shrinkResources and add the
+            // keep rules listed in docs/RELEASE_CHECKLIST.md.
+            isMinifyEnabled = false
+            isShrinkResources = false
+            if (stableStore.exists() && signingPassword != null) signingConfig = signingConfigs.getByName("stable")
         }
     }
 
