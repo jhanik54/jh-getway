@@ -9,31 +9,27 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.drawscope.graphicsLayer
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.delay
 
 /**
@@ -41,17 +37,16 @@ import kotlinx.coroutines.delay
  *
  * One deliberate motion (~2.3s): JH GetWay fades in below the center, rises to a
  * controlled upper position, settles back to center, then JH Soft Corporation fades in.
- * Runs once per cold launch (state is rememberSaveable), never on ordinary resume,
+ * Runs once per cold launch (the caller keeps the "done" flag), never on ordinary resume,
  * honors the reduced-motion preference, and blocks nothing — the gateway and UI
  * compose behind it. No fake progress is shown.
  */
 @Composable
 fun SplashOverlay(darkTheme: Boolean, onDone: () -> Unit) {
     val context = LocalContext.current
-    val density = LocalDensity.current.density
     val reducedMotion = remember { animationsDisabled(context) }
 
-    // 0f = content vertically centered; positive = below center; negative = upper position.
+    // 0.dp = content vertically centered; positive = below center; negative = upper position.
     val offsetDp = remember { Animatable(140f) }
     val contentAlpha = remember { Animatable(0f) }
     val brandAlpha = remember { Animatable(0f) }
@@ -87,18 +82,16 @@ fun SplashOverlay(darkTheme: Boolean, onDone: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer { alpha = overlayAlpha.value }
-            .background(background)
-            .semantics { contentDescription = context.getString(R.string.str_splash_logo_description_7a3e90) },
+            .alpha(overlayAlpha.value)
+            .background(background),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.graphicsLayer {
-                translationY = offsetDp.value * density
-                alpha = contentAlpha.value
-            }
+            modifier = Modifier
+                .offset(y = offsetDp.value.dp)
+                .alpha(contentAlpha.value)
         ) {
             Image(
                 painter = painterResource(R.drawable.jh_getway_logo),

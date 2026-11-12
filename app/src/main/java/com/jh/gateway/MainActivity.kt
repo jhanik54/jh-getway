@@ -76,6 +76,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -227,7 +228,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     val tabs = listOf(stringResource(R.string.str_home_70f8bb), stringResource(R.string.str_providers_87b7c0), stringResource(R.string.str_more_4bab2d))
 
     val darkTheme = when (theme) { "DARK" -> true; "SYSTEM" -> isSystemInDarkTheme(); else -> false }
-    var splashDone by remember { mutableStateOf(false) }
+    var splashDone by rememberSaveable { mutableStateOf(false) }
     MaterialTheme(colorScheme = if (darkTheme) androidx.compose.material3.darkColorScheme(primary = Color(0xFF9DAAFF)) else androidx.compose.material3.lightColorScheme(primary = Blue)) {
         Box(Modifier.fillMaxSize()) {
         Scaffold(
