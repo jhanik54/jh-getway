@@ -203,7 +203,6 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var showAddDialog by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf("") }
     var showRegenerateDialog by remember { mutableStateOf(false) }
-    var showPlayground by remember { mutableStateOf(false) }
     // The page the user navigated to (null = the tab layout is visible).
     var page by remember { mutableStateOf<String?>(null) }
     val backToTabs = { page = null }
@@ -279,7 +278,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                         if (!running) action = GatewayService.ACTION_STOP
                     }
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
-                }, onViewChain = { showChainDialog = true }, onViewLogs = { showMonitoringDialog = true })
+                }, onViewChain = { page = true }, onViewLogs = { page = true })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, providerMessage, unreadableKeys = providerStore.hasUnreadableKeys(), onInfo = { key -> detailProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onAdd = { showAddDialog = true }, onToggle = { key, enabled -> providerStore.setEnabled(key.id, enabled); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onEdit = { key -> editingProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onDelete = { key -> providerStore.remove(key.id); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onTest = { key -> val provider = providerStore.list().firstOrNull { it.id == key.id }; val secret = provider?.let { providerStore.apiKey(it) }; if (provider == null || secret == null) providerMessage = credentialUnavailable else { providerMessage = context.getString(R.string.str_testing_provider_8d3a16, key.name); ProviderModelFetcher.fetch(provider.baseUrl, secret, provider.protocol) { result -> (context as? ComponentActivity)?.runOnUiThread { providerMessage = result.fold({ context.getString(R.string.str_test_ok_models_2c7b45, key.name, it.size) }, { context.getString(R.string.str_test_failed_provider_9e4d18, key.name, it.message ?: "test failed") }) } } } })
                 else -> MoreScreen(Modifier.padding(padding), updateMessage, updateBadge = updateManager.hasUpdateAvailable(), onSettings = { page = "settings" }, onPlayground = { page = "playground" }, onChain = { page = "chain" }, onMonitoring = { page = "monitoring" }, onBackup = { page = "backup" }, onHelp = { page = "help" }, onUpdate = { page = "update" })
             }
@@ -421,7 +420,7 @@ private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: Strin
             OutlinedTextField(timeoutSeconds, { timeoutSeconds = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.str_provider_timeout_seconds_5d3a91)) }, supportingText = { Text(stringResource(R.string.str_provider_timeout_hint_8e1c46)) }, singleLine = true)
         } },
         confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key, protocol, aliases.split(',').map(String::trim).filter(String::isNotBlank), timeoutSeconds.toIntOrNull()?.times(1000) ?: 0) }) { Text(stringResource(R.string.str_save_securely_803e41)) } },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_cancel_77dfd2)) } }
+        dismissButton = { OutlinedButton(onClick = onBack) { Text(stringResource(R.string.str_cancel_77dfd2)) } }
     )
     if (showPresets) {
         AlertDialog(
@@ -650,7 +649,7 @@ private fun ProviderDetailDialog(provider: StoredProvider, health: ProviderHealt
                 Text(stringResource(R.string.str_api_keys_are_never_shown_in_fu_72f5bf), color = Muted, style = MaterialTheme.typography.labelSmall)
             }
         },
-        confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.str_close_bbfa77)) } }
+        confirmButton = { Button(onClick = onBack) { Text(stringResource(R.string.str_close_bbfa77)) } }
     )
 }
 
@@ -693,7 +692,6 @@ private fun localIpAddress(): String = runCatching {
         .filterIsInstance<Inet4Address>().firstOrNull { !it.isLoopbackAddress }?.hostAddress ?: "127.0.0.1"
 }.getOrDefault("127.0.0.1")
 
-@Composable
 @Composable
 private fun HelpPage(settings: GatewaySettings, security: GatewaySecurity, onBack: () -> Unit) {
 
@@ -748,13 +746,12 @@ Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
             }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) }
+                    Button(onClick = onBack) { Text(stringResource(R.string.str_done_e9b450)) }
                 }
         }
     }
 }
 
-@Composable
 @Composable
 private fun BackupPage(providerStore: ProviderStore, onBack: () -> Unit) {
 
@@ -785,7 +782,7 @@ Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) }
+                    Button(onClick = onBack) { Text(stringResource(R.string.str_done_e9b450)) }
                 }
         }
     }
@@ -838,7 +835,6 @@ private fun BreakdownRow(label: String, value: String) {
     }
 }
 
-@Composable
 @Composable
 private fun MonitoringPage(stats: GatewayStats, onBack: () -> Unit) {
 
@@ -948,14 +944,13 @@ Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) }
+                    Button(onClick = onBack) { Text(stringResource(R.string.str_done_e9b450)) }
                     TextButton(onClick = { stats.clear(); logs = emptyList(); expandedTime = null; section = 0 }) { Text(stringResource(R.string.str_clear_logs_532ffc)) }
                 }
         }
     }
 }
 
-@Composable
 @Composable
 private fun SettingsPage(settings: GatewaySettings, gatewaySecurity: GatewaySecurity, onSecurityChanged: () -> Unit, onAppearanceChanged: () -> Unit, onServerSettingsChanged: () -> Unit = {}, onRegenerateKey: () -> Unit = {}, onBack: () -> Unit) {
 
@@ -1009,13 +1004,12 @@ Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 480.dp), ve
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.routingStrategy = routingStrategy; settings.stickySession = stickySession; settings.ipAllowlist = ipAllowlist; maxConcurrent.toIntOrNull()?.let { settings.maxConcurrent = it }; stickyTtl.toIntOrNull()?.let { settings.stickyTtlSeconds = it }; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onServerSettingsChanged(); onDismiss() }) { Text(stringResource(R.string.str_save_efc007)) }
-                    OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_cancel_77dfd2)) }
+                    OutlinedButton(onClick = onBack) { Text(stringResource(R.string.str_cancel_77dfd2)) }
                 }
         }
     }
 }
 
-@Composable
 @Composable
 private fun ChainPage(providerStore: ProviderStore, onBack: () -> Unit) {
 
@@ -1046,13 +1040,12 @@ Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) }
+                    Button(onClick = onBack) { Text(stringResource(R.string.str_done_e9b450)) }
                 }
         }
     }
 }
 
-@Composable
 @Composable
 private fun UpdatePage(settings: GatewaySettings, onBack: () -> Unit) {
 
@@ -1130,7 +1123,7 @@ Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     }) { Text(stringResource(R.string.str_download_update_870d57)) }
                     else -> Button(enabled = !checking, onClick = ::checkLatest) { Text(if (checking) stringResource(R.string.str_checking_820d60) else stringResource(R.string.str_check_for_updates_736b90)) }
                     }
-                    OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_close_bbfa77)) }
+                    OutlinedButton(onClick = onBack) { Text(stringResource(R.string.str_close_bbfa77)) }
                 }
         }
     }
