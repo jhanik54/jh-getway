@@ -20,7 +20,7 @@ object AgentSetup {
             .flatMap { it.inetAddresses.toList().asSequence() }
             .filterIsInstance<java.net.Inet4Address>()
             .firstOrNull { !it.isLoopbackAddress && !it.isLinkLocalAddress }?.hostAddress
-    }.getOrNull()
+    }.getOrNull().orEmpty()
 
     fun baseUrl(port: Int, lan: Boolean): String {
         val host = if (lan) lanAddress() ?: "127.0.0.1" else "127.0.0.1"

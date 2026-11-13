@@ -80,7 +80,7 @@ fun AgentSetupSection(settings: GatewaySettings, gatewaySecurity: GatewaySecurit
             }) { Text(stringResource(R.string.str_agent_setup_copy_9d1c47)) }
         }
 
-        FilterChip(useLan, { useLan = it }, label = { Text(stringResource(R.string.str_wi_fi_open_630746)) })
+        FilterChip(useLan, { useLan = !useLan }, label = { Text(stringResource(R.string.str_wi_fi_open_630746)) })
 
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             snippets.forEachIndexed { index, snippet ->

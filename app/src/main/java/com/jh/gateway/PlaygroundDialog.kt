@@ -94,13 +94,37 @@ fun PlaygroundDialog(
     var sending by remember { mutableStateOf(false) }
     var useGateway by remember { mutableStateOf(true) }
 
+    val text_done_e9b450 = stringResource(R.string.str_done_e9b450)
+    val text_playground_all_models_8d3e72 = stringResource(R.string.str_playground_all_models_8d3e72)
+    val text_playground_api_key_9a6e18 = stringResource(R.string.str_playground_api_key_9a6e18)
+    val text_playground_base_url_5d3b74 = stringResource(R.string.str_playground_base_url_5d3b74)
+    val text_playground_clear_chat_0b7f42 = stringResource(R.string.str_playground_clear_chat_0b7f42)
+    val text_playground_create_failed_0e5b73 = stringResource(R.string.str_playground_create_failed_0e5b73)
+    val text_playground_create_provider_1f8b64 = stringResource(R.string.str_playground_create_provider_1f8b64)
+    val text_playground_direct_8d1f27 = stringResource(R.string.str_playground_direct_8d1f27)
+    val text_playground_discovering_6d81f3 = stringResource(R.string.str_playground_discovering_6d81f3)
+    val text_playground_find_models_3e8b17 = stringResource(R.string.str_playground_find_models_3e8b17)
+    val text_playground_free_badge_2a8e61 = stringResource(R.string.str_playground_free_badge_2a8e61)
+    val text_playground_free_only_1a5b90 = stringResource(R.string.str_playground_free_only_1a5b90)
+    val text_playground_message_3e9c17 = stringResource(R.string.str_playground_message_3e9c17)
+    val text_playground_paid_badge_9c3d17 = stringResource(R.string.str_playground_paid_badge_9c3d17)
+    val text_playground_paid_only_7c9f43 = stringResource(R.string.str_playground_paid_only_7c9f43)
+    val text_playground_provider_created_4a6d28 = stringResource(R.string.str_playground_provider_created_4a6d28)
+    val text_playground_provider_name_2c8f51 = stringResource(R.string.str_playground_provider_name_2c8f51)
+    val text_playground_send_5a3e91 = stringResource(R.string.str_playground_send_5a3e91)
+    val text_playground_step1_7b2e90 = stringResource(R.string.str_playground_step1_7b2e90)
+    val text_playground_step2_6c4e28 = stringResource(R.string.str_playground_step2_6c4e28)
+    val text_playground_step3_b1e07d = stringResource(R.string.str_playground_step3_b1e07d)
+    val text_playground_title_4d1c73 = stringResource(R.string.str_playground_title_4d1c73)
+    val text_playground_unknown_badge_7e4b02 = stringResource(R.string.str_playground_unknown_badge_7e4b02)
+    val text_playground_via_gateway_5f2b64 = stringResource(R.string.str_playground_via_gateway_5f2b64)
     val providers = providerStore.list()
     var createdProviderId by remember { mutableStateOf<String?>(null) }
     val createdProvider = providers.firstOrNull { it.id == createdProviderId }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.str_playground_title_4d1c73), fontWeight = FontWeight.Bold) },
+        title = { Text(text_playground_title_4d1c73, fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 Modifier
@@ -110,25 +134,25 @@ fun PlaygroundDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // --- Step 1: supply an API key -----------------------------------
-                Text(stringResource(R.string.str_playground_step1_7b2e90), fontWeight = FontWeight.SemiBold, color = PlaygroundBlue)
+                Text(text_playground_step1_7b2e90, fontWeight = FontWeight.SemiBold, color = PlaygroundBlue)
                 OutlinedTextField(
                     value = providerName,
                     onValueChange = { providerName = it },
-                    label = { Text(stringResource(R.string.str_playground_provider_name_2c8f51)) },
+                    label = { Text(text_playground_provider_name_2c8f51) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = baseUrl,
                     onValueChange = { baseUrl = it },
-                    label = { Text(stringResource(R.string.str_playground_base_url_5d3b74)) },
+                    label = { Text(text_playground_base_url_5d3b74) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
-                    label = { Text(stringResource(R.string.str_playground_api_key_9a6e18)) },
+                    label = { Text(text_playground_api_key_9a6e18) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -137,7 +161,7 @@ fun PlaygroundDialog(
                         enabled = !discovering && apiKey.isNotBlank() && baseUrl.isNotBlank(),
                         onClick = {
                             discovering = true
-                            status = stringResource(R.string.str_playground_discovering_6d81f3)
+                            status = text_playground_discovering_6d81f3
                             discovery.discover(baseUrl, apiKey, providerName) { result ->
                                 discovering = false
                                 if (result.ok) {
@@ -154,7 +178,7 @@ fun PlaygroundDialog(
                         if (discovering) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                         else Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.str_playground_find_models_3e8b17))
+                        Text(text_playground_find_models_3e8b17)
                     }
                     OutlinedButton(
                         enabled = apiKey.isNotBlank() && baseUrl.isNotBlank() && !discovering,
@@ -166,23 +190,23 @@ fun PlaygroundDialog(
                             }.onSuccess {
                                 createdProviderId = providerStore.list().firstOrNull { provider -> provider.name == providerName }?.id
                                 apiKey = ""
-                                status = stringResource(R.string.str_playground_provider_created_4a6d28)
+                                status = text_playground_provider_created_4a6d28
                             }.onFailure {
-                                status = it.message ?: stringResource(R.string.str_playground_create_failed_0e5b73)
+                                status = it.message ?: text_playground_create_failed_0e5b73
                             }
                         }
-                    ) { Text(stringResource(R.string.str_playground_create_provider_1f8b64)) }
+                    ) { Text(text_playground_create_provider_1f8b64) }
                 }
                 if (status.isNotBlank()) Text(status, color = PlaygroundAmber, style = MaterialTheme.typography.bodySmall)
 
                 // --- Step 2: free / paid model list -----------------------------
                 val currentCatalog = catalog
                 if (currentCatalog != null && currentCatalog.models.isNotEmpty()) {
-                    Text(stringResource(R.string.str_playground_step2_6c4e28), fontWeight = FontWeight.SemiBold, color = PlaygroundBlue)
+                    Text(text_playground_step2_6c4e28, fontWeight = FontWeight.SemiBold, color = PlaygroundBlue)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        FilterChip(costFilter == 0, { costFilter = 0 }, label = { Text(stringResource(R.string.str_playground_all_models_8d3e72) + "  ${currentCatalog.total}") })
-                        FilterChip(costFilter == 1, { costFilter = 1 }, label = { Text(stringResource(R.string.str_playground_free_only_1a5b90) + "  ${currentCatalog.free.size}") })
-                        FilterChip(costFilter == 2, { costFilter = 2 }, label = { Text(stringResource(R.string.str_playground_paid_only_7c9f43) + "  ${currentCatalog.paid.size}") })
+                        FilterChip(costFilter == 0, { costFilter = 0 }, label = { Text(text_playground_all_models_8d3e72 + "  ${currentCatalog.total}") })
+                        FilterChip(costFilter == 1, { costFilter = 1 }, label = { Text(text_playground_free_only_1a5b90 + "  ${currentCatalog.free.size}") })
+                        FilterChip(costFilter == 2, { costFilter = 2 }, label = { Text(text_playground_paid_only_7c9f43 + "  ${currentCatalog.paid.size}") })
                     }
                     Text(
                         stringResource(R.string.str_playground_cost_summary_2f6b18, currentCatalog.free.size, currentCatalog.paid.size, currentCatalog.unknown.size),
@@ -201,11 +225,11 @@ fun PlaygroundDialog(
                 }
 
                 // --- Step 3: chat -------------------------------------------------
-                Text(stringResource(R.string.str_playground_step3_b1e07d), fontWeight = FontWeight.SemiBold, color = PlaygroundBlue)
+                Text(text_playground_step3_b1e07d, fontWeight = FontWeight.SemiBold, color = PlaygroundBlue)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(useGateway, { useGateway = it }, label = { Text(stringResource(R.string.str_playground_via_gateway_5f2b64)) })
+                    FilterChip(useGateway, { useGateway = !useGateway }, label = { Text(text_playground_via_gateway_5f2b64) })
                     Text(
-                        stringResource(R.string.str_playground_direct_8d1f27),
+                        text_playground_direct_8d1f27,
                         color = PlaygroundMuted, style = MaterialTheme.typography.labelSmall
                     )
                 }
@@ -220,7 +244,7 @@ fun PlaygroundDialog(
                     OutlinedTextField(
                         value = input,
                         onValueChange = { input = it },
-                        label = { Text(stringResource(R.string.str_playground_message_3e9c17)) },
+                        label = { Text(text_playground_message_3e9c17) },
                         modifier = Modifier.weight(1f),
                         maxLines = 4
                     )
@@ -247,13 +271,13 @@ fun PlaygroundDialog(
                                 }
                             }
                         }
-                    ) { Icon(Icons.Default.Send, stringResource(R.string.str_playground_send_5a3e91), tint = PlaygroundBlue) }
+                    ) { Icon(Icons.Default.Send, text_playground_send_5a3e91, tint = PlaygroundBlue) }
                 }
             }
         },
-        confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) } },
+        confirmButton = { Button(onClick = onDismiss) { Text(text_done_e9b450) } },
         dismissButton = {
-            TextButton(onClick = { messages = emptyList() }) { Text(stringResource(R.string.str_playground_clear_chat_0b7f42)) }
+            TextButton(onClick = { messages = emptyList() }) { Text(text_playground_clear_chat_0b7f42) }
         }
     )
 }
@@ -266,9 +290,9 @@ private fun ModelRow(model: CatalogModel, selected: Boolean, onSelect: () -> Uni
         ModelCost.UNKNOWN -> PlaygroundMuted
     }
     val label = when (model.cost) {
-        ModelCost.FREE -> stringResource(R.string.str_playground_free_badge_2a8e61)
-        ModelCost.PAID -> stringResource(R.string.str_playground_paid_badge_9c3d17)
-        ModelCost.UNKNOWN -> stringResource(R.string.str_playground_unknown_badge_7e4b02)
+        ModelCost.FREE -> text_playground_free_badge_2a8e61
+        ModelCost.PAID -> text_playground_paid_badge_9c3d17
+        ModelCost.UNKNOWN -> text_playground_unknown_badge_7e4b02
     }
     Row(
         Modifier
