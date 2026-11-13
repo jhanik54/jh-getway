@@ -212,6 +212,17 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     val gatewaySettings = remember { GatewaySettings(context) }
     val gatewayState = remember { GatewayStateStore(context) }
     val updateManager = remember { UpdateManager(context) }
+    // Reactive badge for the More tab: starts from the cached check result and
+    // flips over when a fresh check finds a newer version.
+    var updateBadge by remember { mutableStateOf(updateManager.hasUpdateAvailable()) }
+    // Check for updates on launch at most once a day, so the "Update available"
+    // badge shows up on its own instead of only after the user opens the update page.
+    LaunchedEffect(Unit) {
+        if (System.currentTimeMillis() - updateManager.lastCheckedAt() > 24L * 60L * 60L * 1000L) {
+            val channel = if (gatewaySettings.updateChannel == "BETA") UpdateManager.Channel.BETA else UpdateManager.Channel.STABLE
+            updateManager.check(channel) { updateBadge = updateManager.hasUpdateAvailable() }
+        }
+    }
     val chainCount = remember(keys) { ChainStore(context).load(providerStore.list()).count { it.enabled && it.id != "empty" } }
     LaunchedEffect(Unit) { running = gatewayState.state == GatewayRunState.RUNNING }
     LaunchedEffect(running) {
@@ -280,7 +291,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 }, onViewChain = { page = "chain" }, onViewLogs = { page = "monitoring" })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, providerMessage, unreadableKeys = providerStore.hasUnreadableKeys(), onInfo = { key -> detailProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onAdd = { showAddDialog = true }, onToggle = { key, enabled -> providerStore.setEnabled(key.id, enabled); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onEdit = { key -> editingProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onDelete = { key -> providerStore.remove(key.id); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onTest = { key -> val provider = providerStore.list().firstOrNull { it.id == key.id }; val secret = provider?.let { providerStore.apiKey(it) }; if (provider == null || secret == null) providerMessage = credentialUnavailable else { providerMessage = context.getString(R.string.str_testing_provider_8d3a16, key.name); ProviderModelFetcher.fetch(provider.baseUrl, secret, provider.protocol) { result -> (context as? ComponentActivity)?.runOnUiThread { providerMessage = result.fold({ context.getString(R.string.str_test_ok_models_2c7b45, key.name, it.size) }, { context.getString(R.string.str_test_failed_provider_9e4d18, key.name, it.message ?: "test failed") }) } } } })
-                else -> MoreScreen(Modifier.padding(padding), updateMessage, updateBadge = updateManager.hasUpdateAvailable(), onSettings = { page = "settings" }, onPlayground = { page = "playground" }, onChain = { page = "chain" }, onMonitoring = { page = "monitoring" }, onBackup = { page = "backup" }, onHelp = { page = "help" }, onUpdate = { page = "update" })
+                else -> MoreScreen(Modifier.padding(padding), updateMessage, updateBadge = updateBadge, onSettings = { page = "settings" }, onPlayground = { page = "playground" }, onChain = { page = "chain" }, onMonitoring = { page = "monitoring" }, onBackup = { page = "backup" }, onHelp = { page = "help" }, onUpdate = { page = "update" })
             }
         }
         if (showAddDialog) {
@@ -663,7 +674,7 @@ private fun DetailRow(label: String, value: String) {
 
 @Composable
 private fun MoreScreen(modifier: Modifier, updateMessage: String, updateBadge: Boolean, onSettings: () -> Unit, onChain: () -> Unit, onMonitoring: () -> Unit, onBackup: () -> Unit, onHelp: () -> Unit, onPlayground: () -> Unit, onUpdate: () -> Unit) {
-    Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.height(8.dp)); Text(stringResource(R.string.str_more_4bab2d), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground); Text(stringResource(R.string.str_control_how_jh_getway_works_7d9083), color = Muted)
         MoreItem(Icons.Default.Storage, stringResource(R.string.str_routing_chain_2a695d), stringResource(R.string.str_set_priority_and_fallback_orde_00c694), onChain)
         MoreItem(Icons.Default.CloudQueue, stringResource(R.string.str_playground_title_4d1c73), stringResource(R.string.str_playground_more_9c4e28), onPlayground)
@@ -682,7 +693,7 @@ private fun MoreScreen(modifier: Modifier, updateMessage: String, updateBadge: B
             },
             onClick = onUpdate
         )
-        Spacer(Modifier.weight(1f)); OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("JH GetWay v${BuildConfig.VERSION_NAME}") }
+        Spacer(Modifier.height(8.dp)); OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("JH GetWay v${BuildConfig.VERSION_NAME}") }
     }
 }
 
