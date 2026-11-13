@@ -129,36 +129,17 @@ jobs:
             app/build/outputs/apk/release/app-release.apk
             latest.json
           body: |
-            **v0.7.2 — Stability fixes**
+            **v0.7.3 — Gateway security and usability**
 
             New in this release:
-            - Per-provider timeout override now actually works: the value saved in the provider editor is passed to the gateway and used for that provider's requests
-            - Fixed the provider-add flow dropping the per-provider timeout field when creating a new provider
-
-            Previous highlights (v0.7.1 — Pages and a chat-first Playground):
-            - Every screen is a page now: routing chain, request logs, usage, settings, backup, help and app updates open on their own page with a back button instead of a popup
-            - The Playground opens straight into a chat surface, the way a chat assistant does, with the model picker in a sheet at the top and the composer at the bottom
-            - One API key is enough in the Playground: the provider keeps doing its own rotation behind it, and the app shows which of its models are free and which are paid
-            - The provider editor can now add this gateway itself as a provider, so the gateway can be part of a chain with external providers
-
-            Previous highlights (v0.7.0 — Playground and agent setup):
-
-            - Playground: paste an API key and the app finds which of that provider's models are free and which are paid, straight from the provider's own pricing data
-            - Chat from the Playground, either through this gateway (so the routing chain and the failover are exercised) or straight to the provider
-            - One tap turns the pasted key into a real provider, so the gateway can route to it
-            - Settings generates ready-to-paste setup for OpenCode, Claude Code, Cline and any OpenAI-compatible client, pointed at this gateway
-            - Update screen gained a stable/beta channel, remembers the last check, and the More tab shows when an update is available
-            - A provider can carry its own timeout, so one slow provider no longer stalls the chain
-            - Provider cards and headings now follow the dark theme
-            - The request log can be exported as a redacted CSV file
-
-            Previous highlights (v0.6.1 — Audit fixes):
-
-            - Fixed a gateway freeze: the models and logs endpoints held a concurrency permit without releasing it, so a few authorized requests could wedge the whole gateway
-            - A provider that cannot serve a request (for example an Anthropic provider asked for `response_format`) no longer fails the whole call — the next provider in the chain is used instead
-            - Unsupported fields on the Anthropic and Responses endpoints are now rejected explicitly instead of being silently dropped
-            - Changing the port, Wi-Fi mode or request limit now takes effect immediately instead of after a manual restart
-            - Restoring a backup no longer leaves the replaced providers' encrypted keys behind
+            - The gateway key is now shown only in Settings, not on the home screen, to reduce exposure risk
+            - The "Create API" feature in the Playground has been removed; API keys are now added only via the Providers tab
+            - Added a Playground tab for quick access to the Playground interface
+            - The update system is now accessible throughout the app: a button in the top bar and a row in Settings
+            - The update system checks for updates at startup (once daily) so the badge appears without opening the page
+            - Fixed the timeoutMs field when adding a provider in the editor
+            - The home screen now opens directly into chat with providers from the Providers tab
+            - Removed duplicate navigation items and cleaned up navigation
             - If the device keystore was reset, the gateway issues a fresh key and the Providers screen tells you which keys need to be entered again
             - Provider health warnings are no longer silenced for other providers
             - Sticky session routes are capped instead of growing with every conversation

@@ -1,9 +1,6 @@
 package com.jh.gateway
 
-import android.content.Intent
-import android.content.ClipData
 import android.content.ClipboardManager
-import android.os.Bundle
 import android.app.KeyguardManager
 import android.view.WindowManager
 import android.provider.Settings as AndroidSettings
@@ -34,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.ContentCopy
@@ -243,7 +241,12 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     val providerUpdated = stringResource(R.string.str_provider_updated_d9bc02)
     val updateFailed = stringResource(R.string.str_update_failed_4de04c)
     val couldNotAddProvider = stringResource(R.string.str_could_not_add_provider_f41402)
-    val tabs = listOf(stringResource(R.string.str_home_70f8bb), stringResource(R.string.str_providers_87b7c0), stringResource(R.string.str_more_4bab2d))
+    val tabs = listOf(
+        stringResource(R.string.str_home_70f8bb),
+        stringResource(R.string.str_providers_87b7c0),
+        stringResource(R.string.str_playground_title_4d1c73),
+        stringResource(R.string.str_more_4bab2d)
+    )
 
     val darkTheme = when (theme) { "DARK" -> true; "SYSTEM" -> isSystemInDarkTheme(); else -> false }
     var splashDone by rememberSaveable { mutableStateOf(false) }
@@ -261,6 +264,15 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                         }
                     },
                     actions = {
+                        // Updater entry in the top bar so updates are reachable from any tab.
+                        IconButton(onClick = { page = "update" }) {
+                            Box {
+                                Icon(Icons.Default.SystemUpdate, stringResource(R.string.str_app_updates_16213f))
+                                if (updateBadge) {
+                                    Box(Modifier.size(8.dp).align(Alignment.TopEnd).clip(CircleShape).background(Green))
+                                }
+                            }
+                        }
                         IconButton(onClick = { page = "settings" }) { Icon(Icons.Default.Security, stringResource(R.string.str_open_settings_fd7108)) }
                     }
                 )
@@ -271,7 +283,15 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                         NavigationBarItem(
                             selected = tab == index,
                             onClick = { tab = index },
-                            icon = { Icon(if (index == 0) Icons.Default.Home else if (index == 1) Icons.Default.Key else Icons.Default.MoreHoriz, label) },
+                            icon = {
+                                val icon = when (index) {
+                                    0 -> Icons.Default.Home
+                                    1 -> Icons.Default.Key
+                                    2 -> Icons.Default.Chat
+                                    else -> Icons.Default.MoreHoriz
+                                }
+                                Icon(icon, label)
+                            },
                             label = { Text(label) }
                         )
                     }
@@ -279,10 +299,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
             }
         ) { padding ->
             when (tab) {
-                0 -> HomeScreen(Modifier.padding(padding), running, gatewaySecurity.maskedKey(), gatewaySettings.port, gatewaySettings.wifiMode, keys, strategyLabel(gatewaySettings.routingStrategy, stringResource(R.string.str_detail_priority_f31aca), stringResource(R.string.str_strategy_round_robin_3d7c5a), stringResource(R.string.str_strategy_least_latency_dddcc6)), chainCount, error = updateMessage, onCopyKey = {
-                    val clipboard = context.getSystemService(ClipboardManager::class.java)
-                    clipboard.setPrimaryClip(ClipData.newPlainText("JH GetWay key", gatewaySecurity.gatewayKey()))
-                }, onToggle = {
+                0 -> HomeScreen(Modifier.padding(padding), running, gatewaySettings.port, gatewaySettings.wifiMode, keys, strategyLabel(gatewaySettings.routingStrategy, stringResource(R.string.str_detail_priority_f31aca), stringResource(R.string.str_strategy_round_robin_3d7c5a), stringResource(R.string.str_strategy_least_latency_dddcc6)), chainCount, error = updateMessage, onToggle = {
                     running = !running
                     onRequestNotifications()
                     val intent = Intent(context, GatewayService::class.java).apply {
@@ -291,7 +308,10 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 }, onViewChain = { page = "chain" }, onViewLogs = { page = "monitoring" })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, providerMessage, unreadableKeys = providerStore.hasUnreadableKeys(), onInfo = { key -> detailProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onAdd = { showAddDialog = true }, onToggle = { key, enabled -> providerStore.setEnabled(key.id, enabled); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onEdit = { key -> editingProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onDelete = { key -> providerStore.remove(key.id); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onTest = { key -> val provider = providerStore.list().firstOrNull { it.id == key.id }; val secret = provider?.let { providerStore.apiKey(it) }; if (provider == null || secret == null) providerMessage = credentialUnavailable else { providerMessage = context.getString(R.string.str_testing_provider_8d3a16, key.name); ProviderModelFetcher.fetch(provider.baseUrl, secret, provider.protocol) { result -> (context as? ComponentActivity)?.runOnUiThread { providerMessage = result.fold({ context.getString(R.string.str_test_ok_models_2c7b45, key.name, it.size) }, { context.getString(R.string.str_test_failed_provider_9e4d18, key.name, it.message ?: "test failed") }) } } } })
-                else -> MoreScreen(Modifier.padding(padding), updateMessage, updateBadge = updateBadge, onSettings = { page = "settings" }, onPlayground = { page = "playground" }, onChain = { page = "chain" }, onMonitoring = { page = "monitoring" }, onBackup = { page = "backup" }, onHelp = { page = "help" }, onUpdate = { page = "update" })
+                2 -> Box(Modifier.padding(padding).fillMaxSize()) {
+                    PlaygroundPage(providerStore, gatewaySettings, gatewaySecurity, onBack = { tab = 0 }, onOpenProviders = { tab = 1 }, showBack = false)
+                }
+                else -> MoreScreen(Modifier.padding(padding), updateMessage, updateBadge = updateBadge, onSettings = { page = "settings" }, onChain = { page = "chain" }, onMonitoring = { page = "monitoring" }, onBackup = { page = "backup" }, onHelp = { page = "help" }, onUpdate = { page = "update" })
             }
         }
         if (showAddDialog) {
@@ -319,7 +339,6 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
             "backup" -> BackupPage(providerStore, onBack = backToTabs)
             "help" -> HelpPage(gatewaySettings, gatewaySecurity, onBack = backToTabs)
             "update" -> UpdatePage(gatewaySettings, onBack = backToTabs)
-            "playground" -> PlaygroundPage(providerStore, gatewaySettings, gatewaySecurity, onBack = backToTabs)
             "settings" -> SettingsPage(
                 gatewaySettings,
                 gatewaySecurity,
@@ -327,6 +346,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                 onAppearanceChanged = { theme = gatewaySettings.theme },
                 onServerSettingsChanged = { restartGatewayIfRunning(context, gatewayState) },
                 onRegenerateKey = { showRegenerateDialog = true },
+                onOpenUpdate = { page = "update" },
                 onBack = backToTabs
             )
         }
@@ -444,7 +464,7 @@ private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: Strin
 }
 
 @Composable
-private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String, port: Int, wifiMode: Boolean, keys: List<ProviderKey>, strategy: String, chainCount: Int, error: String, onCopyKey: () -> Unit, onToggle: () -> Unit, onViewChain: () -> Unit, onViewLogs: () -> Unit) {
+private fun HomeScreen(modifier: Modifier, running: Boolean, port: Int, wifiMode: Boolean, keys: List<ProviderKey>, strategy: String, chainCount: Int, error: String, onToggle: () -> Unit, onViewChain: () -> Unit, onViewLogs: () -> Unit) {
     val context = LocalContext.current
     val stats = remember { GatewayStats(context) }
     var statsTick by remember { mutableIntStateOf(0) }
@@ -460,7 +480,6 @@ private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String,
             Spacer(Modifier.height(4.dp))
         }
         item { StatusCard(running, port, wifiMode, error, onToggle) }
-        item { GatewayKeyCard(gatewayKey, onCopyKey) }
         item { MetricRow(requests, readyKeys, keys.size) }
         item { SectionTitle(stringResource(R.string.str_active_route_9ad8bd), stringResource(R.string.str_view_chain_43303f), onViewChain) }
         item { RouteCard(strategy, chainCount) }
@@ -476,9 +495,9 @@ private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String,
 
 @Composable
 private fun GatewayKeyCard(key: String, onCopy: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F7FF)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE5E2FF))) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(Modifier.size(38.dp), shape = RoundedCornerShape(11.dp), color = Color(0xFFE9EDFF)) { Icon(Icons.Default.Security, null, tint = Blue, modifier = Modifier.padding(9.dp)) }
+            Surface(Modifier.size(38.dp), shape = RoundedCornerShape(11.dp), color = Blue.copy(alpha = 0.14f)) { Icon(Icons.Default.Security, null, tint = Blue, modifier = Modifier.padding(9.dp)) }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_gateway_key_c7864a), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground); Text(key, color = Muted, style = MaterialTheme.typography.bodySmall); Text(stringResource(R.string.str_required_by_opencode_and_other_001a4a), color = Muted, style = MaterialTheme.typography.labelSmall) }
             IconButton(onClick = onCopy) { Icon(Icons.Default.ContentCopy, stringResource(R.string.str_copy_gateway_key_824df3), tint = Blue) }
@@ -673,11 +692,10 @@ private fun DetailRow(label: String, value: String) {
 }
 
 @Composable
-private fun MoreScreen(modifier: Modifier, updateMessage: String, updateBadge: Boolean, onSettings: () -> Unit, onChain: () -> Unit, onMonitoring: () -> Unit, onBackup: () -> Unit, onHelp: () -> Unit, onPlayground: () -> Unit, onUpdate: () -> Unit) {
+private fun MoreScreen(modifier: Modifier, updateMessage: String, updateBadge: Boolean, onSettings: () -> Unit, onChain: () -> Unit, onMonitoring: () -> Unit, onBackup: () -> Unit, onHelp: () -> Unit, onUpdate: () -> Unit) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.height(8.dp)); Text(stringResource(R.string.str_more_4bab2d), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground); Text(stringResource(R.string.str_control_how_jh_getway_works_7d9083), color = Muted)
         MoreItem(Icons.Default.Storage, stringResource(R.string.str_routing_chain_2a695d), stringResource(R.string.str_set_priority_and_fallback_orde_00c694), onChain)
-        MoreItem(Icons.Default.CloudQueue, stringResource(R.string.str_playground_title_4d1c73), stringResource(R.string.str_playground_more_9c4e28), onPlayground)
         MoreItem(Icons.Default.Refresh, stringResource(R.string.str_request_logs_f264ea), stringResource(R.string.str_review_provider_switches_and_e_abc19f), onMonitoring)
         MoreItem(Icons.Default.Sync, stringResource(R.string.str_usage_0bb186), stringResource(R.string.str_requests_status_and_latency_su_fb0be2), onMonitoring)
         MoreItem(Icons.Default.Settings, stringResource(R.string.str_settings_c7f73b), stringResource(R.string.str_network_appearance_and_securit_f10828), onSettings)
@@ -962,8 +980,7 @@ Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
     }
 }
 
-@Composable
-private fun SettingsPage(settings: GatewaySettings, gatewaySecurity: GatewaySecurity, onSecurityChanged: () -> Unit, onAppearanceChanged: () -> Unit, onServerSettingsChanged: () -> Unit = {}, onRegenerateKey: () -> Unit = {}, onBack: () -> Unit) {
+private fun SettingsPage(settings: GatewaySettings, gatewaySecurity: GatewaySecurity, onSecurityChanged: () -> Unit, onAppearanceChanged: () -> Unit, onServerSettingsChanged: () -> Unit = {}, onRegenerateKey: () -> Unit = {}, onOpenUpdate: () -> Unit = {}, onBack: () -> Unit) {
 
     var wifi by remember { mutableStateOf(settings.wifiMode) }
     var boot by remember { mutableStateOf(settings.startOnBoot) }
@@ -994,6 +1011,32 @@ Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 480.dp), ve
                 Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.str_regenerate_gateway_key_6b2f84))
             }
+            Text(stringResource(R.string.str_routing_strategy_4a23ad), color = Muted, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(routingStrategy == "PRIORITY", { routingStrategy = "PRIORITY" }, label = { Text(stringResource(R.string.str_priority_886cbf)) })
+                FilterChip(routingStrategy == "ROUND_ROBIN", { routingStrategy = "ROUND_ROBIN" }, label = { Text(stringResource(R.string.str_round_robin_b15b04)) })
+                FilterChip(routingStrategy == "LEAST_LATENCY", { routingStrategy = "LEAST_LATENCY" }, label = { Text(stringResource(R.string.str_least_latency_b0c0de)) })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_sticky_session_d3c1f7)); Text(stringResource(R.string.str_keep_a_conversation_on_the_sam_b727ee), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(stickySession, { stickySession = it }) }
+            if (stickySession) OutlinedTextField(stickyTtl, { stickyTtl = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.str_sticky_ttl_seconds_44316e)) }, singleLine = true)
+            Text(stringResource(R.string.str_appearance_41def7), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(theme == "LIGHT", { theme = "LIGHT" }, label = { Text(stringResource(R.string.str_light_a36ef8)) })
+                FilterChip(theme == "DARK", { theme = "DARK" }, label = { Text(stringResource(R.string.str_dark_ae1ef0)) })
+                FilterChip(theme == "SYSTEM", { theme = "SYSTEM" }, label = { Text(stringResource(R.string.str_system_bc0792)) })
+            }
+            Text(stringResource(R.string.str_security_privacy_27f69f), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_app_lock_a34fa2), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_require_phone_pin_or_biometric_eb3ca5), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(appLock, { appLock = it }) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_block_screenshots_6223b2), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_hide_app_content_from_screensh_cf2805), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(screenshotBlock, { screenshotBlock = it }) }
+            Text(stringResource(R.string.str_gateway_key_c7864a), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+            GatewayKeyCard(gatewaySecurity.maskedKey(), onCopy = {
+                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                clipboard.setPrimaryClip(ClipData.newPlainText("JH GetWay key", gatewaySecurity.gatewayKey()))
+            })
+
+            Text(stringResource(R.string.str_app_updates_16213f), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_check_for_updates_736b90), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_update_system_explains_5e9a47), color = Muted, style = MaterialTheme.typography.bodySmall) }; Button(onClick = onOpenUpdate) { Text(stringResource(R.string.str_open_3f9c71)) } }
+
             Text(stringResource(R.string.str_routing_strategy_4a23ad), color = Muted, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(routingStrategy == "PRIORITY", { routingStrategy = "PRIORITY" }, label = { Text(stringResource(R.string.str_priority_886cbf)) })

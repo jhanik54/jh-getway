@@ -31,7 +31,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,9 +65,9 @@ private val PlaygroundMuted = Color(0xFF667085)
 /**
  * The Playground: a chat surface that is ready to use the moment it is opened.
  *
- * A single API key is enough: the app asks that provider for its model list, works out
- * which of those models are free and which are paid, and lets the user talk to any of
- * them. The provider keeps doing its own rotation underneath, so one key replaces a
+ * The Playground never asks for an API key: providers and their keys are managed in
+ * the Providers tab, and this page simply talks to the models those providers offer.
+ * The provider keeps doing its own rotation underneath, so one key replaces a
  * long list of keys.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -77,7 +76,9 @@ fun PlaygroundPage(
     providerStore: ProviderStore,
     settings: GatewaySettings,
     security: GatewaySecurity,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenProviders: () -> Unit,
+    showBack: Boolean = true
 ) {
     val context = LocalContext.current
     val discovery = remember { ModelDiscovery(context) }
@@ -90,7 +91,6 @@ fun PlaygroundPage(
     var catalog by remember { mutableStateOf<ModelCatalog?>(null) }
     var selectedModel by remember { mutableStateOf("") }
     var showModelSheet by remember { mutableStateOf(false) }
-    var showConnectSheet by remember { mutableStateOf(false) }
 
     // The catalog of every provider that has a key, so the model picker can offer them.
     val providers = providerStore.list()
@@ -131,7 +131,7 @@ fun PlaygroundPage(
         }
     }
 
-    AppPageScaffold(title = stringResource(R.string.str_playground_title_4d1c73), onBack = onBack) {
+    AppPageScaffold(title = stringResource(R.string.str_playground_title_4d1c73), onBack = onBack, showBack = showBack) {
         Column(Modifier.fillMaxSize()) {
             // --- model picker -------------------------------------------------
             Row(
@@ -193,8 +193,8 @@ fun PlaygroundPage(
                         color = PlaygroundMuted,
                         style = MaterialTheme.typography.bodySmall
                     )
-                    Button(onClick = { showConnectSheet = true }) {
-                        Text(stringResource(R.string.str_playground_connect_provider_5d8b34))
+                    Button(onClick = onOpenProviders) {
+                        Text(stringResource(R.string.str_playground_go_to_providers_4c8a15))
                     }
                 }
             } else {
@@ -257,6 +257,10 @@ fun PlaygroundPage(
                 val unknown = allModels.filter { it.cost == ModelCost.UNKNOWN }
                 if (allModels.isEmpty()) {
                     Text(stringResource(R.string.str_playground_no_models_9c7e14), color = PlaygroundMuted)
+                    Text(stringResource(R.string.str_playground_no_models_hint_2b6e08), color = PlaygroundMuted, style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = { showModelSheet = false; onOpenProviders() }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.str_playground_go_to_providers_4c8a15))
+                    }
                 }
                 if (free.isNotEmpty()) {
                     Text(stringResource(R.string.str_playground_free_section_6d3a81), fontWeight = FontWeight.SemiBold, color = PlaygroundGreen)
@@ -270,117 +274,8 @@ fun PlaygroundPage(
                     Text(stringResource(R.string.str_playground_paid_section_7a2c36), fontWeight = FontWeight.SemiBold, color = PlaygroundRed)
                     paid.forEach { ModelRow(it, selectedModel == it.id) { selectedModel = it.id; showModelSheet = false } }
                 }
-                OutlinedButton(onClick = { showModelSheet = false; showConnectSheet = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.str_playground_connect_provider_5d8b34))
-                }
                 Spacer(Modifier.height(24.dp))
             }
-        }
-    }
-
-    // --- connect sheet ----------------------------------------------------
-    if (showConnectSheet) {
-        ConnectProviderSheet(
-            onDismiss = { showConnectSheet = false },
-            onConnected = { providerName, discovered ->
-                catalogs = catalogs + (providerName to discovered)
-                selectedModel = discovered.free.firstOrNull()?.id ?: discovered.models.firstOrNull()?.id.orEmpty()
-                showConnectSheet = false
-            }
-        )
-    }
-}
-
-/**
- * Collects one API key and turns it into a provider. The provider's own rotation keeps
- * working behind it, so a single key is enough.
- */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-@Composable
-private fun ConnectProviderSheet(onDismiss: () -> Unit, onConnected: (String, ModelCatalog) -> Unit) {
-    val context = LocalContext.current
-    val providerStore = remember { ProviderStore(context) }
-    val discovery = remember { ModelDiscovery(context) }
-
-    var apiKey by remember { mutableStateOf("") }
-    var baseUrl by remember { mutableStateOf("https://opencode.ai/zen/v1") }
-    var providerName by remember { mutableStateOf("OpenCode Zen") }
-    var discovering by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf("") }
-    var discovered by remember { mutableStateOf<ModelCatalog?>(null) }
-
-    val textTitle = stringResource(R.string.str_playground_connect_provider_5d8b34)
-    val textFinding = stringResource(R.string.str_playground_discovering_6d81f3)
-    val textCreated = stringResource(R.string.str_playground_provider_created_4a6d28)
-    val textFailed = stringResource(R.string.str_playground_create_failed_0e5b73)
-    val textFind = stringResource(R.string.str_playground_find_models_3e8b17)
-    val textCreate = stringResource(R.string.str_playground_create_provider_1f8b64)
-    val textUse = stringResource(R.string.str_playground_use_this_provider_3c7a92)
-
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(textTitle, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Text(
-                stringResource(R.string.str_playground_one_key_explains_8b4d19),
-                color = PlaygroundMuted,
-                style = MaterialTheme.typography.bodySmall
-            )
-            OutlinedTextField(value = providerName, onValueChange = { providerName = it }, label = { Text(stringResource(R.string.str_playground_provider_name_2c8f51)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = baseUrl, onValueChange = { baseUrl = it }, label = { Text(stringResource(R.string.str_playground_base_url_5d3b74)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = apiKey, onValueChange = { apiKey = it }, label = { Text(stringResource(R.string.str_playground_api_key_9a6e18)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    enabled = !discovering && apiKey.isNotBlank() && baseUrl.isNotBlank(),
-                    onClick = {
-                        discovering = true
-                        status = textFinding
-                        discovery.discover(baseUrl, apiKey, providerName) { result ->
-                            discovering = false
-                            if (result.ok) {
-                                discovered = result.catalog
-                                status = ""
-                            } else {
-                                status = result.error.orEmpty()
-                            }
-                        }
-                    }
-                ) {
-                    if (discovering) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    else Text(textFind)
-                }
-                OutlinedButton(
-                    enabled = apiKey.isNotBlank() && baseUrl.isNotBlank() && !discovering,
-                    onClick = {
-                        runCatching { providerStore.add(providerName, baseUrl, "auto", apiKey, ProviderProtocol.OPENAI) }
-                            .onSuccess {
-                                apiKey = ""
-                                status = textCreated
-                                discovery.discover(baseUrl, apiKey, providerName) { }
-                            }
-                            .onFailure { status = it.message ?: textFailed }
-                    }
-                ) { Text(textCreate) }
-            }
-
-            if (status.isNotBlank()) Text(status, color = PlaygroundRed, style = MaterialTheme.typography.bodySmall)
-
-            val catalog = discovered
-            if (catalog != null && catalog.models.isNotEmpty()) {
-                Text(
-                    stringResource(R.string.str_playground_cost_summary_2f6b18, catalog.free.size, catalog.paid.size, catalog.unknown.size),
-                    color = PlaygroundMuted,
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Button(
-                    onClick = { onConnected(providerName, catalog) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text(textUse) }
-            }
-            Spacer(Modifier.height(24.dp))
         }
     }
 }

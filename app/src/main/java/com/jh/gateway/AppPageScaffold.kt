@@ -26,7 +26,11 @@ import androidx.compose.ui.text.font.FontWeight
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppPageScaffold(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+fun AppPageScaffold(title: String, onBack: () -> Unit, showBack: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
+    if (!showBack) {
+        Column(Modifier.fillMaxSize()) { content() }
+        return
+    }
     Scaffold(
         topBar = {
             TopAppBar(

@@ -282,12 +282,14 @@
     <string name="str_playground_pick_model_4b8e37">Choose a model</string>
     <string name="str_playground_no_model_hint_7d3a82">Tap to pick a model</string>
     <string name="str_playground_empty_title_6e1c47">Start a conversation</string>
-    <string name="str_playground_empty_body_9b3d25">One API key is enough. The provider keeps doing its own rotation behind it, and the app shows you which of its models are free.</string>
+    <string name="str_playground_empty_body_9b3d25">Pick a model from the providers you added and start chatting. Providers and their API keys are managed in the Providers tab.</string>
     <string name="str_playground_connect_provider_5d8b34">Connect a provider</string>
     <string name="str_playground_one_key_explains_8b4d19">Paste one API key. Every model that provider offers becomes available here, and its own rotation keeps working behind the gateway.</string>
     <string name="str_playground_use_this_provider_3c7a92">Use this provider</string>
     <string name="str_playground_free_section_6d3a81">Free models</string>
     <string name="str_playground_unknown_section_1e8b47">Models without pricing information</string>
     <string name="str_playground_paid_section_7a2c36">Paid models</string>
-    <string name="str_playground_no_models_9c7e14">No models yet. Connect a provider first.</string>
+    <string name="str_playground_no_models_9c7e14">No models yet.</string>
+    <string name="str_playground_no_models_hint_2b6e08">Add a provider with its API key in the Providers tab first, then come back here.</string>
+    <string name="str_playground_go_to_providers_4c8a15">Open the Providers tab</string>
 </resources>
