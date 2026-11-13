@@ -3,11 +3,14 @@ package com.jh.gateway
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 /**
  * The Playground classifies the models of a provider as free, paid or unknown.
  * These tests pin the rules so a provider with published pricing is never mislabelled.
  */
+@RunWith(RobolectricTestRunner::class)
 class ModelCatalogParserTest {
 
     @Test

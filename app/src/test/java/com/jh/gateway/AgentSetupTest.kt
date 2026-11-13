@@ -4,11 +4,14 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 /**
  * The agent setup snippets must point at the local gateway and carry the gateway key,
  * because that is what makes an agent use the routing chain instead of a provider.
  */
+@RunWith(RobolectricTestRunner::class)
 class AgentSetupTest {
 
     @Test
