@@ -96,14 +96,21 @@ fun PlaygroundPage(
     val providers = providerStore.list()
     var catalogs by remember { mutableStateOf<Map<String, ModelCatalog>>(emptyMap()) }
     LaunchedEffect(providers.map { it.id }) {
+        // Use the cached catalog first so opening the page never waits for the
+        // network; only a provider without a cached catalog is asked for its models.
         val loaded = providers.mapNotNull { provider ->
-            val key = providerStore.apiKey(provider) ?: return@mapNotNull null
-            discovery.discover(provider.baseUrl, key, provider.name) { result ->
-                if (result.ok) catalogs = catalogs + (provider.name to result.catalog)
-            }
-            provider.name to discovery.cached(provider.name)
+            providerStore.apiKey(provider) ?: return@mapNotNull null
+            val cached = discovery.cached(provider.name)
+            provider.name to cached
         }.toMap()
         catalogs = loaded
+        providers.forEach { provider ->
+            if (providerStore.apiKey(provider) == null) return@forEach
+            if (loaded[provider.name]?.total != 0) return@forEach
+            discovery.discover(provider.baseUrl, providerStore.apiKey(provider) ?: return@forEach, provider.name) { result ->
+                if (result.ok) catalogs = catalogs + (provider.name to result.catalog)
+            }
+        }
     }
 
     val allModels = remember(catalogs) {
@@ -111,12 +118,16 @@ fun PlaygroundPage(
     }
     val currentModel = allModels.firstOrNull { it.id == selectedModel }
 
+    // The provider that owns the selected model; used when the chat goes straight
+    // to the provider instead of through the gateway.
+    val selectedProvider = remember(catalogs, selectedModel, providers) {
+        catalogs.entries.firstOrNull { (_, catalog) -> catalog.models.any { it.id == selectedModel } }?.key
+            ?.let { name -> providers.firstOrNull { it.name == name } }
+    }
     val target = when {
         useGateway -> PlaygroundChat.gatewayTarget(context, settings.port, security.gatewayKey(), settings.wifiMode, AgentSetup.lanAddress())
-        else -> {
-            val provider = providers.firstOrNull { it.name == catalogs.keys.firstOrNull { name -> catalogs[name]?.models?.any { it.id == selectedModel } == true } }
-            val key = provider?.let { providerStore.apiKey(it) }.orEmpty()
-            provider?.let { PlaygroundChat.Target.Provider(it.baseUrl, key, it.protocol) }
+        else -> selectedProvider?.let { provider ->
+            PlaygroundChat.Target.Provider(provider.baseUrl, providerStore.apiKey(provider).orEmpty(), provider.protocol)
         }
     }
 
@@ -397,6 +408,9 @@ private fun ModelRow(model: CatalogModel, selected: Boolean, onSelect: () -> Uni
     ) {
         Column(Modifier.weight(1f)) {
             Text(model.id, style = MaterialTheme.typography.bodyMedium, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = MaterialTheme.colorScheme.onBackground)
+            if (model.provider.isNotBlank()) {
+                Text(model.provider, style = MaterialTheme.typography.labelSmall, color = PlaygroundMuted)
+            }
             if (model.promptPrice.isNotBlank() || model.completionPrice.isNotBlank()) {
                 Text(
                     stringResource(R.string.str_playground_price_5f7b21, model.promptPrice, model.completionPrice),
