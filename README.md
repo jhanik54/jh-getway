@@ -9,8 +9,9 @@ A local Android AI gateway that sits between your apps and multiple OpenAI-compa
 ## বৈশিষ্ট্য (Features)
 
 - **Foreground gateway service** — Ktor/CIO local server (`0.0.0.0:<port>`), foreground notification, boot restart (`BootReceiver`), `/healthz` endpoint
-- **Playground** — paste an API key, see which of that provider's models are free and which are paid, and chat with them from inside the app (through the gateway or straight to the provider)
+- **Playground** — a chat surface you can use at any time: paste one API key, the app works out which of that provider's models are free and which are paid, and you talk to any of them (through the gateway or straight to the provider)
 - **Agent setup** — Settings generates ready-to-paste configuration for OpenCode, Claude Code, Cline and any OpenAI-compatible client, pointed at this gateway
+- **Full pages, no popups** — routing chain, request logs, usage, settings, backup, help and updates each open on their own page with a back button
 - **Protocol adapters** — OpenAI Chat Completions, Anthropic Messages, OpenAI Responses; streaming (SSE) bridging and tool-call translation between formats
 - **Routing** — persistent Best/Good/Basic chain with reorder controls; Priority, Round Robin and Least-Latency strategies; TTL sticky sessions; per-provider upstream model aliases
 - **Failover** — classified provider failures, `Retry-After`-aware cooldowns, 401 disable, 5xx cooldown, bounded fallback chain
