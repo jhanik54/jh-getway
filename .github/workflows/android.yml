@@ -129,11 +129,24 @@ jobs:
             app/build/outputs/apk/release/app-release.apk
             latest.json
           body: |
-            **v0.6.0 — Release hardening**
+            **v0.6.1 — Audit fixes**
 
             New in this release:
+            - Fixed a gateway freeze: the models and logs endpoints held a concurrency permit without releasing it, so a few authorized requests could wedge the whole gateway
+            - A provider that cannot serve a request (for example an Anthropic provider asked for `response_format`) no longer fails the whole call — the next provider in the chain is used instead
+            - Unsupported fields on the Anthropic and Responses endpoints are now rejected explicitly instead of being silently dropped
+            - Changing the port, Wi-Fi mode or request limit now takes effect immediately instead of after a manual restart
+            - Restoring a backup no longer leaves the replaced providers' encrypted keys behind
+            - If the device keystore was reset, the gateway issues a fresh key and the Providers screen tells you which keys need to be entered again
+            - Provider health warnings are no longer silenced for other providers
+            - Sticky session routes are capped instead of growing with every conversation
+            - Faster requests: API keys are decrypted once and cached instead of on every call
+            - About 50 previously hardcoded English strings are now translated, including in the Bangla locale
+            - The in-app updater keeps the downloaded update after a restart and reads the version code correctly
+
+            Previous highlights:
             - Branded cold-launch splash (JH GetWay rises, settles at center, then JH Soft Corporation); honors reduced-motion and runs once per cold launch
-            - In-app updater now verifies the downloaded APK's package name, versionCode and signing certificate before offering the install, and re-verifies at install time
+            - In-app updater verifies the downloaded APK's package name, versionCode and signing certificate before offering the install, and re-verifies at install time
             - Release build published alongside the debug APK, both signed with the same stable certificate so updates install without uninstalling
             - CI verifies every APK (package, version, signature, SHA-256) before publishing and fails the release on mismatch
             - Signing password moved to a GitHub Secret; no fallback password anywhere in the build
