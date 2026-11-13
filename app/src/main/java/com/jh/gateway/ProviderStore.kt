@@ -27,7 +27,9 @@ data class StoredProvider(
     val protocol: ProviderProtocol = ProviderProtocol.OPENAI,
     val enabled: Boolean = true,
     val cooldownUntil: Long = 0L,
-    val aliases: List<String> = emptyList()
+    val aliases: List<String> = emptyList(),
+    /** Per-provider timeout override in milliseconds; 0 means "use the global setting". */
+    val timeoutMs: Int = 0
 ) {
     val isCoolingDown: Boolean get() = cooldownUntil > System.currentTimeMillis()
 }
@@ -46,12 +48,12 @@ class ProviderStore(context: Context) {
         val array = JSONArray(prefs.getString(PROVIDERS, "[]"))
         (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
-            StoredProvider(item.getString("id"), item.getString("name"), item.getString("baseUrl"), item.getString("model"), item.getInt("priority"), runCatching { ProviderProtocol.valueOf(item.optString("protocol", "OPENAI")) }.getOrDefault(ProviderProtocol.OPENAI), item.optBoolean("enabled", true), item.optLong("cooldownUntil", 0L), (0 until item.optJSONArray("aliases")?.length().orZero()).mapNotNull { item.optJSONArray("aliases")?.optString(it)?.takeIf(String::isNotBlank) })
+            StoredProvider(item.getString("id"), item.getString("name"), item.getString("baseUrl"), item.getString("model"), item.getInt("priority"), runCatching { ProviderProtocol.valueOf(item.optString("protocol", "OPENAI")) }.getOrDefault(ProviderProtocol.OPENAI), item.optBoolean("enabled", true), item.optLong("cooldownUntil", 0L), (0 until item.optJSONArray("aliases")?.length().orZero()).mapNotNull { item.optJSONArray("aliases")?.optString(it)?.takeIf(String::isNotBlank) }, item.optInt("timeoutMs", 0).coerceIn(0, 600_000))
         }.sortedBy { it.priority }
     }.getOrDefault(emptyList())
 
     @Synchronized
-    fun add(name: String, baseUrl: String, model: String, apiKey: String, protocol: ProviderProtocol = ProviderProtocol.OPENAI, aliases: List<String> = emptyList()) {
+    fun add(name: String, baseUrl: String, model: String, apiKey: String, protocol: ProviderProtocol = ProviderProtocol.OPENAI, aliases: List<String> = emptyList(), timeoutMs: Int = 0) {
         require(name.trim().isNotBlank()) { "Provider name is required" }
         val normalizedUrl = baseUrl.trim().trimEnd('/')
         val parsedUrl = runCatching { URI(normalizedUrl) }.getOrNull()
@@ -60,7 +62,7 @@ class ProviderStore(context: Context) {
         val normalizedKey = apiKey.trim()
         require(list().none { apiKey(it) == normalizedKey }) { "This API key is already configured" }
         val id = "provider_${UUID.randomUUID()}"
-        val provider = StoredProvider(id, name.trim(), normalizedUrl, model.trim().ifBlank { "auto" }, list().size + 1, protocol, aliases = aliases.map(String::trim).filter(String::isNotBlank).distinct())
+        val provider = StoredProvider(id, name.trim(), normalizedUrl, model.trim().ifBlank { "auto" }, list().size + 1, protocol, aliases = aliases.map(String::trim).filter(String::isNotBlank).distinct(), timeoutMs = timeoutMs.coerceIn(0, 600_000))
         save(list() + provider)
         prefs.edit().putString(keyName(id), encrypt(normalizedKey)).apply()
         keyCache[id] = normalizedKey
@@ -110,7 +112,7 @@ class ProviderStore(context: Context) {
     fun get(id: String): StoredProvider? = list().firstOrNull { it.id == id }
 
     @Synchronized
-    fun update(id: String, name: String, baseUrl: String, model: String, apiKey: String, protocol: ProviderProtocol, aliases: List<String> = emptyList()) {
+    fun update(id: String, name: String, baseUrl: String, model: String, apiKey: String, protocol: ProviderProtocol, aliases: List<String> = emptyList(), timeoutMs: Int = 0) {
         require(name.trim().isNotBlank()) { "Provider name is required" }
         val normalizedUrl = baseUrl.trim().trimEnd('/')
         val parsedUrl = runCatching { URI(normalizedUrl) }.getOrNull()
@@ -119,7 +121,7 @@ class ProviderStore(context: Context) {
         require(normalizedKey.isNotBlank()) { "API key is required" }
         require(list().filterNot { it.id == id }.none { apiKey(it) == normalizedKey }) { "This API key is already configured" }
         val current = list().firstOrNull { it.id == id } ?: error("Provider not found")
-        save(list().map { if (it.id == id) current.copy(name = name.trim(), baseUrl = normalizedUrl, model = model.trim().ifBlank { "auto" }, protocol = protocol, aliases = aliases.map(String::trim).filter(String::isNotBlank).distinct()) else it })
+        save(list().map { if (it.id == id) current.copy(name = name.trim(), baseUrl = normalizedUrl, model = model.trim().ifBlank { "auto" }, protocol = protocol, aliases = aliases.map(String::trim).filter(String::isNotBlank).distinct(), timeoutMs = timeoutMs.coerceIn(0, 600_000)) else it })
         prefs.edit().putString(keyName(id), encrypt(normalizedKey)).apply()
         keyCache[id] = normalizedKey
     }
@@ -164,7 +166,7 @@ class ProviderStore(context: Context) {
 
     private fun save(providers: List<StoredProvider>) {
         val array = JSONArray()
-        providers.forEach { p -> array.put(JSONObject().apply { put("id", p.id); put("name", p.name); put("baseUrl", p.baseUrl); put("model", p.model); put("priority", p.priority); put("protocol", p.protocol.name); put("enabled", p.enabled); put("cooldownUntil", p.cooldownUntil); put("aliases", p.aliases.joinToString(",")) }) }
+        providers.forEach { p -> array.put(JSONObject().apply { put("id", p.id); put("name", p.name); put("baseUrl", p.baseUrl); put("model", p.model); put("priority", p.priority); put("protocol", p.protocol.name); put("enabled", p.enabled); put("cooldownUntil", p.cooldownUntil); put("aliases", p.aliases.joinToString(",")); put("timeoutMs", p.timeoutMs) }) }
         prefs.edit().putString(PROVIDERS, array.toString()).apply()
     }
 

@@ -145,6 +145,11 @@ class MainActivity : ComponentActivity() {
 }
 
 private val Navy = Color(0xFF111827)
+private val NavyDark = Color(0xFFE5E7EB)
+private val CardLight = Color.White
+private val CardDark = Color(0xFF1F2937)
+private val BorderLight = Color(0xFFE6EAF0)
+private val BorderDark = Color(0xFF374151)
 private val Blue = Color(0xFF4F67E8)
 private val Green = Color(0xFF15803D)
 private val Muted = Color(0xFF667085)
@@ -283,14 +288,14 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         if (showAddDialog) {
             AddProviderDialog(
                 onDismiss = { showAddDialog = false },
-                onSave = { name, url, model, key, protocol, aliases ->
+                onSave = { name, url, model, key, protocol, aliases, timeoutMs ->
                     runCatching { providerStore.add(name, url, model, key, protocol, aliases) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) }; showAddDialog = false }.onFailure { providerMessage = it.message ?: couldNotAddProvider }
                 }
             )
         }
         editingProvider?.let { provider ->
-            AddProviderDialog(initial = provider, initialKey = providerStore.apiKey(provider).orEmpty(), onDismiss = { editingProvider = null }, onSave = { name, url, model, key, protocol, aliases ->
-                runCatching { providerStore.update(provider.id, name, url, model, key, protocol, aliases) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) }; editingProvider = null; providerMessage = providerUpdated }.onFailure { providerMessage = it.message ?: updateFailed }
+            AddProviderDialog(initial = provider, initialKey = providerStore.apiKey(provider).orEmpty(), onDismiss = { editingProvider = null }, onSave = { name, url, model, key, protocol, aliases, timeoutMs ->
+                runCatching { providerStore.update(provider.id, name, url, model, key, protocol, aliases, timeoutMs) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) }; editingProvider = null; providerMessage = providerUpdated }.onFailure { providerMessage = it.message ?: updateFailed }
             })
         }
         detailProvider?.let { provider ->
@@ -352,13 +357,14 @@ private fun StoredProvider.toProviderKey(store: ProviderStore, health: ProviderH
 }
 
 @Composable
-private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: String = "", onDismiss: () -> Unit, onSave: (String, String, String, String, ProviderProtocol, List<String>) -> Unit) {
+private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: String = "", onDismiss: () -> Unit, onSave: (String, String, String, String, ProviderProtocol, List<String>, Int) -> Unit) {
     val context = LocalContext.current
     var name by remember(initial?.id) { mutableStateOf(initial?.name ?: "") }
     var url by remember(initial?.id) { mutableStateOf(initial?.baseUrl ?: "https://api.openai.com") }
     var model by remember(initial?.id) { mutableStateOf(initial?.model ?: "auto") }
     var key by remember(initial?.id) { mutableStateOf(initialKey) }
     var aliases by remember(initial?.id) { mutableStateOf(initial?.aliases?.joinToString(", ") ?: "") }
+    var timeoutSeconds by remember(initial?.id) { mutableStateOf((initial?.timeoutMs ?: 0).div(1000).toString()) }
     var showPresets by remember { mutableStateOf(false) }
     var protocol by remember { mutableStateOf(ProviderProtocol.OPENAI) }
     var models by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -390,8 +396,9 @@ private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: Strin
             }
             OutlinedTextField(key, { key = it }, label = { Text(stringResource(R.string.str_api_key_cf678c)) }, singleLine = true)
             OutlinedTextField(aliases, { aliases = it }, label = { Text(stringResource(R.string.str_model_aliases_comma_separated_8cb80b)) }, singleLine = true)
+            OutlinedTextField(timeoutSeconds, { timeoutSeconds = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.str_provider_timeout_seconds_5d3a91)) }, supportingText = { Text(stringResource(R.string.str_provider_timeout_hint_8e1c46)) }, singleLine = true)
         } },
-        confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key, protocol, aliases.split(',').map(String::trim).filter(String::isNotBlank)) }) { Text(stringResource(R.string.str_save_securely_803e41)) } },
+        confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key, protocol, aliases.split(',').map(String::trim).filter(String::isNotBlank), timeoutSeconds.toIntOrNull()?.times(1000) ?: 0) }) { Text(stringResource(R.string.str_save_securely_803e41)) } },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_cancel_77dfd2)) } }
     )
     if (showPresets) {
@@ -417,7 +424,7 @@ private fun HomeScreen(modifier: Modifier, running: Boolean, gatewayKey: String,
         item {
             Spacer(Modifier.height(8.dp))
             Text(stringResource(R.string.str_good_morning_1f1c44), style = MaterialTheme.typography.titleMedium, color = Muted)
-            Text(stringResource(R.string.str_your_ai_traffic_simplified_2b2277), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy)
+            Text(stringResource(R.string.str_your_ai_traffic_simplified_2b2277), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
             Spacer(Modifier.height(4.dp))
         }
         item { StatusCard(running, port, wifiMode, error, onToggle) }
@@ -441,7 +448,7 @@ private fun GatewayKeyCard(key: String, onCopy: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(Modifier.size(38.dp), shape = RoundedCornerShape(11.dp), color = Color(0xFFE9EDFF)) { Icon(Icons.Default.Security, null, tint = Blue, modifier = Modifier.padding(9.dp)) }
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_gateway_key_c7864a), fontWeight = FontWeight.SemiBold, color = Navy); Text(key, color = Muted, style = MaterialTheme.typography.bodySmall); Text(stringResource(R.string.str_required_by_opencode_and_other_001a4a), color = Muted, style = MaterialTheme.typography.labelSmall) }
+            Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_gateway_key_c7864a), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground); Text(key, color = Muted, style = MaterialTheme.typography.bodySmall); Text(stringResource(R.string.str_required_by_opencode_and_other_001a4a), color = Muted, style = MaterialTheme.typography.labelSmall) }
             IconButton(onClick = onCopy) { Icon(Icons.Default.ContentCopy, stringResource(R.string.str_copy_gateway_key_824df3), tint = Blue) }
         }
     }
@@ -487,7 +494,7 @@ private fun MetricCard(title: String, value: String, icon: androidx.compose.ui.g
     Card(modifier, colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F6FA))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(icon, null, tint = Blue, modifier = Modifier.size(20.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Navy)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
             Text(title, style = MaterialTheme.typography.labelMedium, color = Muted)
         }
     }
@@ -496,7 +503,7 @@ private fun MetricCard(title: String, value: String, icon: androidx.compose.ui.g
 @Composable
 private fun SectionTitle(title: String, action: String, onClick: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, fontWeight = FontWeight.Bold, color = Navy)
+        Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
         Spacer(Modifier.weight(1f))
         if (onClick != null) {
             Text(action, color = Blue, style = MaterialTheme.typography.labelMedium, modifier = Modifier.clickable(onClick = onClick))
@@ -509,11 +516,11 @@ private fun SectionTitle(title: String, action: String, onClick: (() -> Unit)? =
 @Composable
 private fun RouteCard(strategy: String, chainCount: Int) {
     val subtitle = if (chainCount <= 0) "No providers in chain · routing by $strategy" else "$strategy · $chainCount provider${if (chainCount == 1) "" else "s"} in chain"
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE6EAF0))) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(Modifier.size(42.dp), shape = RoundedCornerShape(12.dp), color = Color(0xFFE9EDFF)) { Icon(Icons.Default.CloudQueue, null, tint = Blue, modifier = Modifier.padding(10.dp)) }
             Spacer(Modifier.width(12.dp))
-            Column { Text(stringResource(R.string.str_best_available_1f0017), fontWeight = FontWeight.SemiBold, color = Navy); Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall) }
+            Column { Text(stringResource(R.string.str_best_available_1f0017), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground); Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall) }
             Spacer(Modifier.weight(1f))
             Icon(Icons.Default.CheckCircle, stringResource(R.string.str_active_route_9ad8bd), tint = Green)
         }
@@ -534,7 +541,7 @@ private fun ProvidersScreen(modifier: Modifier, keys: List<ProviderKey>, message
     }
     Column(modifier.fillMaxSize().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_providers_87b7c0), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text(stringResource(R.string.str_manage_your_ai_keys_and_models_71313e), color = Muted) }; Button(onClick = onAdd) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.str_add_key_49e644)) } }
+        Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_providers_87b7c0), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground); Text(stringResource(R.string.str_manage_your_ai_keys_and_models_71313e), color = Muted) }; Button(onClick = onAdd) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.str_add_key_49e644)) } }
         if (message.isNotBlank()) Text(message, color = Muted, style = MaterialTheme.typography.bodySmall)
         if (unreadableKeys) {
             Card(
@@ -560,10 +567,10 @@ private fun ProvidersScreen(modifier: Modifier, keys: List<ProviderKey>, message
 
 @Composable
 private fun ProviderCard(key: ProviderKey, onToggle: (ProviderKey, Boolean) -> Unit, onEdit: (ProviderKey) -> Unit, onDelete: (ProviderKey) -> Unit, onTest: (ProviderKey) -> Unit, onInfo: (ProviderKey) -> Unit) {
-    Card(onClick = { onInfo(key) }, colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE6EAF0))) {
+    Card(onClick = { onInfo(key) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(38.dp), shape = RoundedCornerShape(10.dp), color = Color(0xFFF0F2FF)) { Icon(Icons.Default.Key, null, tint = Blue, modifier = Modifier.padding(9.dp)) }; Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text(key.name, fontWeight = FontWeight.SemiBold, color = Navy); Text(key.provider, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1) }; StatusPill(key.status) }
-            Row(verticalAlignment = Alignment.CenterVertically) { Text(key.model, color = Navy, fontWeight = FontWeight.Medium); Spacer(Modifier.weight(1f)); Text(stringResource(R.string.str_card_priority_926478), color = Muted, style = MaterialTheme.typography.labelSmall) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(38.dp), shape = RoundedCornerShape(10.dp), color = Color(0xFFF0F2FF)) { Icon(Icons.Default.Key, null, tint = Blue, modifier = Modifier.padding(9.dp)) }; Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text(key.name, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground); Text(key.provider, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1) }; StatusPill(key.status) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Text(key.model, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Medium); Spacer(Modifier.weight(1f)); Text(stringResource(R.string.str_card_priority_926478), color = Muted, style = MaterialTheme.typography.labelSmall) }
             val healthColor = when (key.healthStatus) { "healthy" -> Green; "unhealthy" -> Color(0xFFB91C1C); else -> Muted }
             val healthText = when (key.healthStatus) {
                 "healthy" -> "Healthy · ${key.healthLatencyMs}ms"
@@ -608,12 +615,12 @@ private fun ProviderDetailDialog(provider: StoredProvider, health: ProviderHealt
                 DetailRow(stringResource(R.string.str_detail_priority_f31aca), provider.priority.toString())
                 DetailRow(stringResource(R.string.str_detail_status_9729f9), when { !provider.enabled -> stringResource(R.string.str_status_disabled_6808c3); provider.isCoolingDown -> stringResource(R.string.str_status_cooling_down_4ceade); else -> stringResource(R.string.str_status_enabled_a2e77d) })
                 DetailRow(stringResource(R.string.str_detail_api_key_6325d8), maskedKey)
-                Text(stringResource(R.string.str_health_3703cd), fontWeight = FontWeight.SemiBold, color = Navy)
+                Text(stringResource(R.string.str_health_3703cd), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                 DetailRow(stringResource(R.string.str_detail_status_9729f9), healthStatus)
                 if ((health?.lastLatencyMs ?: 0L) > 0L) DetailRow(stringResource(R.string.str_detail_last_latency_d52d9e), "${health?.lastLatencyMs}ms")
                 if (health?.lastError.orEmpty().isNotBlank()) DetailRow(stringResource(R.string.str_detail_last_error_18c7dd), health?.lastError.orEmpty())
                 if ((health?.updatedAt ?: 0L) > 0L) DetailRow(stringResource(R.string.str_detail_checked_810874), SimpleDateFormat("MMM d, HH:mm:ss", Locale.US).format(Date(health?.updatedAt ?: 0L)))
-                Text(stringResource(R.string.str_recent_activity_last_100_logge_94fa25), fontWeight = FontWeight.SemiBold, color = Navy)
+                Text(stringResource(R.string.str_recent_activity_last_100_logge_94fa25), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                 DetailRow(stringResource(R.string.str_detail_requests_21430a), logs.size.toString())
                 DetailRow(stringResource(R.string.str_detail_success_rate_948aa3), "$successRate%")
                 DetailRow(stringResource(R.string.str_detail_avg_latency_6ffad6), "${averageLatency}ms")
@@ -629,14 +636,14 @@ private fun ProviderDetailDialog(provider: StoredProvider, health: ProviderHealt
 private fun DetailRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth()) {
         Text(label, color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(96.dp))
-        Text(value, color = Navy, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        Text(value, color = MaterialTheme.colorScheme.onBackground, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
 private fun MoreScreen(modifier: Modifier, updateMessage: String, updateBadge: Boolean, onSettings: () -> Unit, onChain: () -> Unit, onMonitoring: () -> Unit, onBackup: () -> Unit, onHelp: () -> Unit, onPlayground: () -> Unit, onUpdate: () -> Unit) {
     Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Spacer(Modifier.height(8.dp)); Text(stringResource(R.string.str_more_4bab2d), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Navy); Text(stringResource(R.string.str_control_how_jh_getway_works_7d9083), color = Muted)
+        Spacer(Modifier.height(8.dp)); Text(stringResource(R.string.str_more_4bab2d), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground); Text(stringResource(R.string.str_control_how_jh_getway_works_7d9083), color = Muted)
         MoreItem(Icons.Default.Storage, stringResource(R.string.str_routing_chain_2a695d), stringResource(R.string.str_set_priority_and_fallback_orde_00c694), onChain)
         MoreItem(Icons.Default.CloudQueue, stringResource(R.string.str_playground_title_4d1c73), stringResource(R.string.str_playground_more_9c4e28), onPlayground)
         MoreItem(Icons.Default.Refresh, stringResource(R.string.str_request_logs_f264ea), stringResource(R.string.str_review_provider_switches_and_e_abc19f), onMonitoring)
@@ -691,27 +698,27 @@ private fun HelpDialog(settings: GatewaySettings, security: GatewaySecurity, onD
                 }
                 when (section) {
                     0 -> {
-                        Text(stringResource(R.string.str_gateway_address_b839fe), fontWeight = FontWeight.Bold, color = Navy)
+                        Text(stringResource(R.string.str_gateway_address_b839fe), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                         Text(baseUrl, color = Muted, style = MaterialTheme.typography.bodySmall)
                         Text(stringResource(R.string.str_gateway_key_is_copied_only_whe_bc5126), color = Muted, style = MaterialTheme.typography.bodySmall)
                         OutlinedButton(onClick = { copy(baseUrl) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.str_copy_api_address_754bd2)) }
                         OutlinedButton(onClick = { copy(key) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.str_copy_gateway_key_824df3)) }
-                        Text(stringResource(R.string.str_opencode_claude_code_codex_ad34bf), fontWeight = FontWeight.Bold, color = Navy)
+                        Text(stringResource(R.string.str_opencode_claude_code_codex_ad34bf), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                         Text(stringResource(R.string.str_set_the_tool_base_url_to_the_a_e5e822), color = Muted, style = MaterialTheme.typography.bodySmall)
                         val termux = "export OPENAI_BASE_URL=$baseUrl\nexport OPENAI_API_KEY=$key"
                         OutlinedButton(onClick = { copy(termux) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.str_copy_termux_setup_7f2c18)) }
-                        Text(stringResource(R.string.str_curl_test_603d5a), fontWeight = FontWeight.Bold, color = Navy)
+                        Text(stringResource(R.string.str_curl_test_603d5a), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                         Text("curl $baseUrl/models -H \"Authorization: Bearer $key\"", color = Muted, style = MaterialTheme.typography.bodySmall)
                         OutlinedButton(onClick = { copy("curl $baseUrl/models -H \"Authorization: Bearer $key\"") }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.str_copy_curl_test_0640b7)) }
                     }
                     1 -> {
-                        Text(stringResource(R.string.str_keep_the_gateway_alive_227fb1), fontWeight = FontWeight.Bold, color = Navy)
+                        Text(stringResource(R.string.str_keep_the_gateway_alive_227fb1), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                         Text(stringResource(R.string.str_help_battery_advice_90403d), color = Muted, style = MaterialTheme.typography.bodySmall)
                         Button(onClick = openBatterySettings, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.str_open_battery_settings_2c45a5)) }
                         Text(stringResource(R.string.str_the_gateway_uses_a_foreground_38112d), color = Muted, style = MaterialTheme.typography.bodySmall)
                     }
                     else -> {
-                        Text(stringResource(R.string.str_common_fixes_986ece), fontWeight = FontWeight.Bold, color = Navy)
+                        Text(stringResource(R.string.str_common_fixes_986ece), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                         Text(stringResource(R.string.str_help_troubleshooting_3a4b97), color = Muted, style = MaterialTheme.typography.bodySmall)
                         Text(stringResource(R.string.str_privacy_prompts_responses_and_380f83), color = Muted, style = MaterialTheme.typography.bodySmall)
                     }
@@ -797,7 +804,7 @@ private fun buildDiagnostics(context: android.content.Context, stats: GatewaySta
 @Composable
 private fun BreakdownRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = Navy, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(label, color = MaterialTheme.colorScheme.onBackground, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Text(value, color = Muted, style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -815,6 +822,17 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
     val errors = total - success
     val successRate = if (total == 0) 0 else success * 100 / total
     val average = if (logs.isEmpty()) 0 else logs.map { it.latencyMs }.average().toInt()
+    val exporter = remember { LogExporter(context) }
+    val exportLog = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) {
+            val ok = exporter.write(uri, stats, asJson = false)
+            android.widget.Toast.makeText(
+                context,
+                context.getString(if (ok) R.string.str_log_exported_5c3a81 else R.string.str_log_export_failed_9e7b24),
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
     val usageEntries = stats.usageEntries()
     val tokensByProvider = usageEntries.groupBy { it.provider.ifBlank { "unknown" } }.map { (name, entries) -> name to entries.sumOf { it.promptTokens + it.completionTokens } }.sortedByDescending { it.second }.take(5)
     val tokensByModel = usageEntries.groupBy { it.model.ifBlank { "unknown" } }.map { (name, entries) -> name to entries.sumOf { it.promptTokens + it.completionTokens } }.sortedByDescending { it.second }.take(5)
@@ -846,7 +864,7 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
                                         val expanded = expandedTime == log.time
                                         Card(onClick = { expandedTime = if (expanded) null else log.time }, colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F6FA))) {
                                             Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                Row { Text(log.provider ?: stringResource(R.string.str_chain_no_provider_532e25), fontWeight = FontWeight.SemiBold, color = Navy); Spacer(Modifier.weight(1f)); Text("HTTP ${log.status}", color = if (log.status in 200..299) Green else Color(0xFFB91C1C), style = MaterialTheme.typography.labelSmall) }
+                                                Row { Text(log.provider ?: stringResource(R.string.str_chain_no_provider_532e25), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground); Spacer(Modifier.weight(1f)); Text("HTTP ${log.status}", color = if (log.status in 200..299) Green else Color(0xFFB91C1C), style = MaterialTheme.typography.labelSmall) }
                                                 Text("${log.endpoint} · ${log.latencyMs}ms", color = Muted, style = MaterialTheme.typography.bodySmall)
                                                 Text(SimpleDateFormat("MMM d, HH:mm:ss", Locale.US).format(Date(log.time)), color = Muted, style = MaterialTheme.typography.labelSmall)
                                                 if (expanded) {
@@ -871,13 +889,13 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
                             Text(stringResource(R.string.str_usage_recent_success_c413b9), color = Muted)
                             Text(stringResource(R.string.str_usage_avg_latency_0d53b4), color = Muted)
                             Text(stringResource(R.string.str_usage_tokens_619e48), color = Muted)
-                            Text(stringResource(R.string.str_requests_by_provider_bf849a), fontWeight = FontWeight.SemiBold, color = Navy)
+                            Text(stringResource(R.string.str_requests_by_provider_bf849a), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                             if (requestsByProvider.isEmpty()) Text(stringResource(R.string.str_no_provider_data_yet_4cb97e), color = Muted, style = MaterialTheme.typography.bodySmall)
                             else requestsByProvider.forEach { (name, count) -> BreakdownRow(name, count.toString()) }
-                            Text(stringResource(R.string.str_tokens_by_provider_4ad0bb), fontWeight = FontWeight.SemiBold, color = Navy)
+                            Text(stringResource(R.string.str_tokens_by_provider_4ad0bb), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                             if (tokensByProvider.isEmpty()) Text(stringResource(R.string.str_no_usage_recorded_yet_e61023), color = Muted, style = MaterialTheme.typography.bodySmall)
                             else tokensByProvider.forEach { (name, count) -> BreakdownRow(name, formatTokens(count)) }
-                            Text(stringResource(R.string.str_tokens_by_model_92019a), fontWeight = FontWeight.SemiBold, color = Navy)
+                            Text(stringResource(R.string.str_tokens_by_model_92019a), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                             if (tokensByModel.isEmpty()) Text(stringResource(R.string.str_no_usage_recorded_yet_e61023), color = Muted, style = MaterialTheme.typography.bodySmall)
                             else tokensByModel.forEach { (name, count) -> BreakdownRow(name, formatTokens(count)) }
                         }
@@ -892,6 +910,9 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
                                 clipboard.setPrimaryClip(ClipData.newPlainText("JH GetWay diagnostics", buildDiagnostics(context, stats)))
                                 android.widget.Toast.makeText(context, context.getString(R.string.str_diagnostics_copied_e55f8a), android.widget.Toast.LENGTH_SHORT).show()
                             }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.ContentCopy, null, tint = Blue); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.str_copy_diagnostics_973495)) }
+                            OutlinedButton(onClick = { exportLog.launch("jh-getway-logs.csv") }, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Default.Storage, null, tint = Blue); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.str_export_logs_csv_4b8c19))
+                            }
                         }
                     }
                 }
@@ -918,14 +939,14 @@ private fun SettingsDialog(settings: GatewaySettings, gatewaySecurity: GatewaySe
     AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.str_gateway_settings_81a3d1)) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.str_changes_apply_the_next_time_th_3189c0), color = Muted, style = MaterialTheme.typography.bodySmall)
-            Text(stringResource(R.string.str_network_53ebc5), fontWeight = FontWeight.SemiBold, color = Navy)
+            Text(stringResource(R.string.str_network_53ebc5), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_wi_fi_open_630746), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_allow_devices_on_the_same_wi_f_249f94), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(wifi, { wifi = it }) }
             if (wifi) Text(stringResource(R.string.str_security_warning_wi_fi_mode_ex_20b29a), color = Color(0xFFB91C1C), style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.str_port_fe0351)) }, singleLine = true)
             OutlinedTextField(maxConcurrent, { maxConcurrent = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.str_max_concurrent_requests_1_32_64038e)) }, singleLine = true)
             if (wifi) OutlinedTextField(ipAllowlist, { ipAllowlist = it }, label = { Text(stringResource(R.string.str_allowed_ips_comma_separated_bl_e8c56b)) }, supportingText = { Text(stringResource(R.string.str_example_192_168_1_10_192_168_1_a4fdd4)) }, singleLine = true)
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_start_on_boot_9a3dcc), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_start_gateway_after_phone_rebo_f57e2a), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(boot, { boot = it }) }
-            Text(stringResource(R.string.str_routing_7d15dd), fontWeight = FontWeight.SemiBold, color = Navy)
+            Text(stringResource(R.string.str_routing_7d15dd), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
             AgentSetupSection(settings, gatewaySecurity)
             OutlinedButton(onClick = onRegenerateKey, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
@@ -940,13 +961,13 @@ private fun SettingsDialog(settings: GatewaySettings, gatewaySecurity: GatewaySe
             }
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_sticky_session_d3c1f7)); Text(stringResource(R.string.str_keep_a_conversation_on_the_sam_b727ee), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(stickySession, { stickySession = it }) }
             if (stickySession) OutlinedTextField(stickyTtl, { stickyTtl = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.str_sticky_ttl_seconds_44316e)) }, singleLine = true)
-            Text(stringResource(R.string.str_appearance_41def7), fontWeight = FontWeight.SemiBold, color = Navy)
+            Text(stringResource(R.string.str_appearance_41def7), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(theme == "LIGHT", { theme = "LIGHT" }, label = { Text(stringResource(R.string.str_light_a36ef8)) })
                 FilterChip(theme == "DARK", { theme = "DARK" }, label = { Text(stringResource(R.string.str_dark_ae1ef0)) })
                 FilterChip(theme == "SYSTEM", { theme = "SYSTEM" }, label = { Text(stringResource(R.string.str_system_bc0792)) })
             }
-            Text(stringResource(R.string.str_security_privacy_27f69f), fontWeight = FontWeight.SemiBold, color = Navy)
+            Text(stringResource(R.string.str_security_privacy_27f69f), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_app_lock_a34fa2), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_require_phone_pin_or_biometric_eb3ca5), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(appLock, { appLock = it }) }
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_block_screenshots_6223b2), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_hide_app_content_from_screensh_cf2805), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(screenshotBlock, { screenshotBlock = it }) }
         }
@@ -966,14 +987,14 @@ private fun ChainDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.str_requests_using_auto_start_from_ec5b5c), color = Muted, style = MaterialTheme.typography.bodySmall)
                 ChainTier.values().forEach { tier ->
-                    Text(tier.name, fontWeight = FontWeight.Bold, color = Navy)
+                    Text(tier.name, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                     val tierEntries = entries.filter { it.tier == tier }
                     if (tierEntries.isEmpty()) Text(stringResource(R.string.str_no_models_in_this_tier_ee5987), color = Muted, style = MaterialTheme.typography.labelSmall)
                     tierEntries.forEach { entry ->
                         val index = entries.indexOf(entry)
                         Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F6FA))) {
                             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) { Text(entry.provider, fontWeight = FontWeight.SemiBold, color = Navy); Text(entry.model, color = Muted, style = MaterialTheme.typography.labelSmall) }
+                                Column(Modifier.weight(1f)) { Text(entry.provider, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground); Text(entry.model, color = Muted, style = MaterialTheme.typography.labelSmall) }
                                 IconButton(onClick = { if (index > 0) { val next = entries.toMutableList(); val previous = next.removeAt(index - 1); next.add(index, previous); persist(next) } }) { Text(stringResource(R.string.str_x_9555ff), color = Blue) }
                                 IconButton(onClick = { if (index < entries.lastIndex) { val next = entries.toMutableList(); val following = next.removeAt(index + 1); next.add(index, following); persist(next) } }) { Text(stringResource(R.string.str_x_fc4866), color = Blue) }
                                 TextButton(onClick = { val nextTier = when (entry.tier) { ChainTier.BEST -> ChainTier.GOOD; ChainTier.GOOD -> ChainTier.BASIC; ChainTier.BASIC -> ChainTier.BEST }; persist(entries.map { if (it.id == entry.id) it.copy(tier = nextTier) else it }) }) { Text(stringResource(R.string.str_tier_5bd44e)) }
@@ -1047,7 +1068,7 @@ private fun UpdateDialog(settings: GatewaySettings, onDismiss: () -> Unit) {
                 update?.let { available ->
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F6FA))) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(stringResource(R.string.str_update_new_version_736c0b), fontWeight = FontWeight.Bold, color = Navy)
+                            Text(stringResource(R.string.str_update_new_version_736c0b), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                             Text(available.notes, color = Muted, style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -1072,12 +1093,12 @@ private fun UpdateDialog(settings: GatewaySettings, onDismiss: () -> Unit) {
 
 @Composable
 private fun MoreItem(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, onClick: () -> Unit = {}) {
-    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE6EAF0))) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = Blue, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(14.dp)); Column { Text(title, fontWeight = FontWeight.SemiBold, color = Navy); Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall) }; Spacer(Modifier.weight(1f)); Text(stringResource(R.string.str_x_60ecbc), style = MaterialTheme.typography.headlineSmall, color = Muted) } }
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = Blue, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(14.dp)); Column { Text(title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground); Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall) }; Spacer(Modifier.weight(1f)); Text(stringResource(R.string.str_x_60ecbc), style = MaterialTheme.typography.headlineSmall, color = Muted) } }
 }
 
 @Composable
 private fun LogRow(log: RequestLog) {
     val ok = log.status in 200..299
     val color = if (ok) Green else Color(0xFFB91C1C)
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).clip(CircleShape).background(color)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(log.provider ?: stringResource(R.string.str_chain_no_provider_532e25), color = Navy, fontWeight = FontWeight.Medium); Text("${log.endpoint} · ${log.latencyMs}ms${if (log.model.isNotBlank()) " · ${log.model}" else ""}", color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1) }; Text(SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(log.time)), color = Muted, style = MaterialTheme.typography.labelSmall) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).clip(CircleShape).background(color)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(log.provider ?: stringResource(R.string.str_chain_no_provider_532e25), color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Medium); Text("${log.endpoint} · ${log.latencyMs}ms${if (log.model.isNotBlank()) " · ${log.model}" else ""}", color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1) }; Text(SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(log.time)), color = Muted, style = MaterialTheme.typography.labelSmall) }
 }

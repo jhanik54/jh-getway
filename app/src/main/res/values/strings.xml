@@ -272,4 +272,9 @@
     <string name="str_update_check_failed_saved_4c8e21">Check failed; the saved update is still available.</string>
     <string name="str_update_check_failed_7a3b52">Check failed: %1$s</string>
     <string name="str_playground_more_9c4e28">Give an API key, see which models are free, and chat</string>
+    <string name="str_provider_timeout_seconds_5d3a91">Timeout (seconds, 0 = global)</string>
+    <string name="str_provider_timeout_hint_8e1c46">Leave at 0 to use the gateway default.</string>
+    <string name="str_log_exported_5c3a81">Log exported</string>
+    <string name="str_log_export_failed_9e7b24">Export failed</string>
+    <string name="str_export_logs_csv_4b8c19">Export log as CSV</string>
 </resources>

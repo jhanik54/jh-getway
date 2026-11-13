@@ -268,4 +268,9 @@
     <string name="str_update_check_failed_saved_4c8e21">চেক ব্যর্থ; সংরক্ষিত আপডেট এখনো পাওয়া যাচ্ছে।</string>
     <string name="str_update_check_failed_7a3b52">চেক ব্যর্থ: %1$s</string>
     <string name="str_playground_more_9c4e28">API key দিন, ফ্রি মডেল দেখুন, আর চ্যাট করুন</string>
+    <string name="str_provider_timeout_seconds_5d3a91">সময়সীমা (সেকেন্ড, 0 = ডিফল্ট)</string>
+    <string name="str_provider_timeout_hint_8e1c46">গেটওয়ের ডিফল্ট ব্যবহার করতে 0 রাখুন।</string>
+    <string name="str_log_exported_5c3a81">লগ export হয়েছে</string>
+    <string name="str_log_export_failed_9e7b24">Export ব্যর্থ</string>
+    <string name="str_export_logs_csv_4b8c19">লগ CSV হিসেবে export করুন</string>
 </resources>

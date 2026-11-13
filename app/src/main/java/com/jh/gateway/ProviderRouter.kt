@@ -192,10 +192,13 @@ class ProviderRouter(private val store: ProviderStore, private val chainStore: C
     }
 
     private fun open(provider: StoredProvider, key: String, body: String): HttpURLConnection {
+        // A provider may override the global timeouts: one slow provider should not
+        // stall a chain that would otherwise fall back quickly.
+        val readTimeout = if (provider.timeoutMs > 0) provider.timeoutMs else settings.readTimeoutMs
         val connection = (URL(endpoint(provider.baseUrl, provider.protocol)).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = settings.connectTimeoutMs
-            readTimeout = settings.readTimeoutMs
+            readTimeout = readTimeout
             doOutput = true
             instanceFollowRedirects = false // Security: never auto-follow redirects (SSRF protection)
             if (provider.protocol == ProviderProtocol.ANTHROPIC) { setRequestProperty("x-api-key", key); setRequestProperty("anthropic-version", "2023-06-01") } else setRequestProperty("Authorization", "Bearer $key")
