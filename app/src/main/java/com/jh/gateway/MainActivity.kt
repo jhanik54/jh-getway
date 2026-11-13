@@ -202,14 +202,11 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var keys by remember { mutableStateOf(providerStore.list().map { it.toProviderKey(providerStore, providerHealth) }) }
     var showAddDialog by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf("") }
-    var showSettings by remember { mutableStateOf(false) }
-    var showUpdateDialog by remember { mutableStateOf(false) }
-    var showChainDialog by remember { mutableStateOf(false) }
-    var showMonitoringDialog by remember { mutableStateOf(false) }
-    var showBackupDialog by remember { mutableStateOf(false) }
-    var showHelpDialog by remember { mutableStateOf(false) }
     var showRegenerateDialog by remember { mutableStateOf(false) }
     var showPlayground by remember { mutableStateOf(false) }
+    // The page the user navigated to (null = the tab layout is visible).
+    var page by remember { mutableStateOf<String?>(null) }
+    val backToTabs = { page = null }
     var editingProvider by remember { mutableStateOf<StoredProvider?>(null) }
     var detailProvider by remember { mutableStateOf<StoredProvider?>(null) }
     var providerMessage by remember { mutableStateOf("") }
@@ -242,6 +239,8 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
     var splashDone by rememberSaveable { mutableStateOf(false) }
     MaterialTheme(colorScheme = if (darkTheme) androidx.compose.material3.darkColorScheme(primary = Color(0xFF9DAAFF)) else androidx.compose.material3.lightColorScheme(primary = Blue)) {
         Box(Modifier.fillMaxSize()) {
+        // While a full page is open the tab chrome is replaced by the page frame.
+        if (page == null) {
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -252,7 +251,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Security, stringResource(R.string.str_open_settings_fd7108)) }
+                        IconButton(onClick = { page = "settings" }) { Icon(Icons.Default.Security, stringResource(R.string.str_open_settings_fd7108)) }
                     }
                 )
             },
@@ -282,11 +281,13 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
                 }, onViewChain = { showChainDialog = true }, onViewLogs = { showMonitoringDialog = true })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, providerMessage, unreadableKeys = providerStore.hasUnreadableKeys(), onInfo = { key -> detailProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onAdd = { showAddDialog = true }, onToggle = { key, enabled -> providerStore.setEnabled(key.id, enabled); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onEdit = { key -> editingProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onDelete = { key -> providerStore.remove(key.id); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onTest = { key -> val provider = providerStore.list().firstOrNull { it.id == key.id }; val secret = provider?.let { providerStore.apiKey(it) }; if (provider == null || secret == null) providerMessage = credentialUnavailable else { providerMessage = context.getString(R.string.str_testing_provider_8d3a16, key.name); ProviderModelFetcher.fetch(provider.baseUrl, secret, provider.protocol) { result -> (context as? ComponentActivity)?.runOnUiThread { providerMessage = result.fold({ context.getString(R.string.str_test_ok_models_2c7b45, key.name, it.size) }, { context.getString(R.string.str_test_failed_provider_9e4d18, key.name, it.message ?: "test failed") }) } } } })
-                else -> MoreScreen(Modifier.padding(padding), updateMessage, updateBadge = updateManager.hasUpdateAvailable(), onSettings = { showSettings = true }, onPlayground = { showPlayground = true }, onChain = { showChainDialog = true }, onMonitoring = { showMonitoringDialog = true }, onBackup = { showBackupDialog = true }, onHelp = { showHelpDialog = true }, onUpdate = { showUpdateDialog = true })
+                else -> MoreScreen(Modifier.padding(padding), updateMessage, updateBadge = updateManager.hasUpdateAvailable(), onSettings = { page = "settings" }, onPlayground = { page = "playground" }, onChain = { page = "chain" }, onMonitoring = { page = "monitoring" }, onBackup = { page = "backup" }, onHelp = { page = "help" }, onUpdate = { page = "update" })
             }
         }
         if (showAddDialog) {
             AddProviderDialog(
+                gatewayBaseUrl = "http://127.0.0.1:${gatewaySettings.port}/v1",
+                gatewayKey = gatewaySecurity.gatewayKey(),
                 onDismiss = { showAddDialog = false },
                 onSave = { name, url, model, key, protocol, aliases, timeoutMs ->
                     runCatching { providerStore.add(name, url, model, key, protocol, aliases) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) }; showAddDialog = false }.onFailure { providerMessage = it.message ?: couldNotAddProvider }
@@ -301,13 +302,24 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
         detailProvider?.let { provider ->
             ProviderDetailDialog(provider, providerHealth.get(provider.id), providerStore.apiKey(provider)?.let { "${it.take(4)}••••••${it.takeLast(4)}" } ?: "••••••••", GatewayStats(context), onDismiss = { detailProvider = null })
         }
-        if (showSettings) SettingsDialog(gatewaySettings, gatewaySecurity, onSecurityChanged = { (context as? MainActivity)?.applySecurityFromUi() }, onAppearanceChanged = { theme = gatewaySettings.theme }, onServerSettingsChanged = { restartGatewayIfRunning(context, gatewayState) }, onRegenerateKey = { showRegenerateDialog = true }, onDismiss = { showSettings = false })
-        if (showUpdateDialog) UpdateDialog(gatewaySettings, onDismiss = { showUpdateDialog = false })
-        if (showChainDialog) ChainDialog(providerStore, onDismiss = { showChainDialog = false })
-        if (showMonitoringDialog) MonitoringDialog(GatewayStats(context), onDismiss = { showMonitoringDialog = false })
-        if (showBackupDialog) BackupDialog(providerStore, onDismiss = { showBackupDialog = false })
-        if (showHelpDialog) HelpDialog(gatewaySettings, gatewaySecurity, onDismiss = { showHelpDialog = false })
-        if (showPlayground) PlaygroundDialog(providerStore, gatewaySettings, gatewaySecurity, onDismiss = { showPlayground = false })
+        }
+        when (page) {
+            "chain" -> ChainPage(providerStore, onBack = backToTabs)
+            "monitoring" -> MonitoringPage(GatewayStats(context), onBack = backToTabs)
+            "backup" -> BackupPage(providerStore, onBack = backToTabs)
+            "help" -> HelpPage(gatewaySettings, gatewaySecurity, onBack = backToTabs)
+            "update" -> UpdatePage(gatewaySettings, onBack = backToTabs)
+            "playground" -> PlaygroundPage(providerStore, gatewaySettings, gatewaySecurity, onBack = backToTabs)
+            "settings" -> SettingsPage(
+                gatewaySettings,
+                gatewaySecurity,
+                onSecurityChanged = { (context as? MainActivity)?.applySecurityFromUi() },
+                onAppearanceChanged = { theme = gatewaySettings.theme },
+                onServerSettingsChanged = { restartGatewayIfRunning(context, gatewayState) },
+                onRegenerateKey = { showRegenerateDialog = true },
+                onBack = backToTabs
+            )
+        }
         if (showRegenerateDialog) {
             AlertDialog(
                 onDismissRequest = { showRegenerateDialog = false },
@@ -357,7 +369,7 @@ private fun StoredProvider.toProviderKey(store: ProviderStore, health: ProviderH
 }
 
 @Composable
-private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: String = "", onDismiss: () -> Unit, onSave: (String, String, String, String, ProviderProtocol, List<String>, Int) -> Unit) {
+private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: String = "", gatewayBaseUrl: String = "", gatewayKey: String = "", onDismiss: () -> Unit, onSave: (String, String, String, String, ProviderProtocol, List<String>, Int) -> Unit) {
     val context = LocalContext.current
     var name by remember(initial?.id) { mutableStateOf(initial?.name ?: "") }
     var url by remember(initial?.id) { mutableStateOf(initial?.baseUrl ?: "https://api.openai.com") }
@@ -378,6 +390,16 @@ private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: Strin
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.str_choose_a_provider_preset_or_en_e20bec), color = Muted, style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = { showPresets = true }, modifier = Modifier.fillMaxWidth()) { Text(if (name.isBlank()) stringResource(R.string.str_choose_provider_preset_30169e) else name) }
+            if (gatewayBaseUrl.isNotBlank()) {
+                OutlinedButton(
+                    onClick = { name = "JH GetWay (local)"; url = gatewayBaseUrl; model = "auto"; key = gatewayKey },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Storage, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.str_use_this_gateway_5c1e93))
+                }
+            }
             OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.str_name_709a23)) }, singleLine = true)
             OutlinedTextField(url, { url = it }, label = { Text(stringResource(R.string.str_base_url_1dbd61)) }, singleLine = true)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -672,7 +694,9 @@ private fun localIpAddress(): String = runCatching {
 }.getOrDefault("127.0.0.1")
 
 @Composable
-private fun HelpDialog(settings: GatewaySettings, security: GatewaySecurity, onDismiss: () -> Unit) {
+@Composable
+private fun HelpPage(settings: GatewaySettings, security: GatewaySecurity, onBack: () -> Unit) {
+
     val context = LocalContext.current
     val manufacturer = android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase(Locale.US) }
     var section by remember { mutableIntStateOf(0) }
@@ -686,11 +710,9 @@ private fun HelpDialog(settings: GatewaySettings, security: GatewaySecurity, onD
     val openBatterySettings = {
         context.startActivity(Intent(AndroidSettings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.str_help_setup_guide_9c83d5)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        AppPageScaffold(title = stringResource(R.string.str_help_setup_guide_9c83d5), onBack = onBack) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(section == 0, { section = 0 }, label = { Text(stringResource(R.string.str_tools_4fa8cc)) })
                     FilterChip(section == 1, { section = 1 }, label = { Text(stringResource(R.string.str_battery_4a9be0)) })
@@ -724,13 +746,18 @@ private fun HelpDialog(settings: GatewaySettings, security: GatewaySecurity, onD
                     }
                 }
             }
-        },
-        confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) } }
-    )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) }
+                }
+        }
+    }
 }
 
 @Composable
-private fun BackupDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
+@Composable
+private fun BackupPage(providerStore: ProviderStore, onBack: () -> Unit) {
+
     val context = LocalContext.current
     val backupManager = remember { BackupManager() }
     var password by remember { mutableStateOf("") }
@@ -748,18 +775,20 @@ private fun BackupDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
         if (uri == null) { status = context.getString(R.string.str_backup_import_cancelled_a88478); return@rememberLauncherForActivityResult }
         runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error(context.getString(R.string.str_backup_cannot_read_c4a17d)) }.onSuccess { pendingImport = it; exportMode = false; showPassword = true }.onFailure { status = context.getString(R.string.str_backup_import_failed_reason_6eaaef) }
     }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.str_backup_restore_a16162)) }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        AppPageScaffold(title = stringResource(R.string.str_backup_restore_a16162), onBack = onBack) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(status, color = Muted, style = MaterialTheme.typography.bodySmall)
             Button(onClick = { exportMode = true; showPassword = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.str_export_encrypted_backup_86ea57)) }
             OutlinedButton(onClick = { openFile.launch(arrayOf("application/octet-stream", "application/octet-stream+zip", "*/*")) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.str_import_backup_1b40a3)) }
             if (pendingImport != null) Row(verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.str_replace_existing_providers_8a480f), Modifier.weight(1f)); Switch(replaceMode, { replaceMode = it }) }
         }
-    }, confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) } })
-    if (showPassword) AlertDialog(onDismissRequest = { showPassword = false }, title = { Text(if (exportMode) stringResource(R.string.str_set_backup_password_8bcec6) else stringResource(R.string.str_backup_password_d96a60)) }, text = { OutlinedTextField(password, { password = it }, label = { Text(stringResource(R.string.str_password_10_characters_45ec44)) }, visualTransformation = PasswordVisualTransformation(), singleLine = true) }, confirmButton = { Button(enabled = password.length >= 10, onClick = {
-        if (exportMode) { showPassword = false; createFile.launch("jh-getway-backup.aigw") }
-        else { runCatching { backupManager.import(providerStore, pendingImport ?: error("No backup selected"), password.toCharArray(), replaceMode) }.onSuccess { status = context.getString(R.string.str_backup_imported_0a0269) }.onFailure { status = context.getString(R.string.str_backup_import_failed_428856) }; showPassword = false; pendingImport = null }
-    }) { Text(stringResource(R.string.str_continue_2e0262)) } }, dismissButton = { OutlinedButton(onClick = { showPassword = false }) { Text(stringResource(R.string.str_cancel_77dfd2)) } })
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) }
+                }
+        }
+    }
 }
 
 private fun statusMeaning(status: Int): String = when {
@@ -810,7 +839,9 @@ private fun BreakdownRow(label: String, value: String) {
 }
 
 @Composable
-private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
+@Composable
+private fun MonitoringPage(stats: GatewayStats, onBack: () -> Unit) {
+
     val context = LocalContext.current
     var section by remember { mutableIntStateOf(0) } // 0 Logs, 1 Usage, 2 Diagnostics
     var logs by remember { mutableStateOf(stats.recent()) }
@@ -837,11 +868,9 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
     val tokensByProvider = usageEntries.groupBy { it.provider.ifBlank { "unknown" } }.map { (name, entries) -> name to entries.sumOf { it.promptTokens + it.completionTokens } }.sortedByDescending { it.second }.take(5)
     val tokensByModel = usageEntries.groupBy { it.model.ifBlank { "unknown" } }.map { (name, entries) -> name to entries.sumOf { it.promptTokens + it.completionTokens } }.sortedByDescending { it.second }.take(5)
     val requestsByProvider = logs.groupBy { it.provider ?: stringResource(R.string.str_chain_no_provider_532e25) }.map { (name, entries) -> name to entries.size }.sortedByDescending { it.second }.take(5)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(when (section) { 0 -> stringResource(R.string.str_request_logs_f264ea); 1 -> stringResource(R.string.str_usage_0bb186); else -> stringResource(R.string.str_diagnostics_3af227) }) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        AppPageScaffold(title = stringResource(R.string.str_request_logs_f264ea), onBack = onBack) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(section == 0, { section = 0 }, label = { Text(stringResource(R.string.str_logs_126dd3)) })
                     FilterChip(section == 1, { section = 1 }, label = { Text(stringResource(R.string.str_usage_0bb186)) })
@@ -917,14 +946,19 @@ private fun MonitoringDialog(stats: GatewayStats, onDismiss: () -> Unit) {
                     }
                 }
             }
-        },
-        confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) } },
-        dismissButton = { TextButton(onClick = { stats.clear(); logs = emptyList(); expandedTime = null; section = 0 }) { Text(stringResource(R.string.str_clear_logs_532ffc)) } }
-    )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) }
+                    TextButton(onClick = { stats.clear(); logs = emptyList(); expandedTime = null; section = 0 }) { Text(stringResource(R.string.str_clear_logs_532ffc)) }
+                }
+        }
+    }
 }
 
 @Composable
-private fun SettingsDialog(settings: GatewaySettings, gatewaySecurity: GatewaySecurity, onSecurityChanged: () -> Unit, onAppearanceChanged: () -> Unit, onServerSettingsChanged: () -> Unit = {}, onRegenerateKey: () -> Unit = {}, onDismiss: () -> Unit) {
+@Composable
+private fun SettingsPage(settings: GatewaySettings, gatewaySecurity: GatewaySecurity, onSecurityChanged: () -> Unit, onAppearanceChanged: () -> Unit, onServerSettingsChanged: () -> Unit = {}, onRegenerateKey: () -> Unit = {}, onBack: () -> Unit) {
+
     var wifi by remember { mutableStateOf(settings.wifiMode) }
     var boot by remember { mutableStateOf(settings.startOnBoot) }
     var appLock by remember { mutableStateOf(settings.appLock) }
@@ -936,8 +970,9 @@ private fun SettingsDialog(settings: GatewaySettings, gatewaySecurity: GatewaySe
     var ipAllowlist by remember { mutableStateOf(settings.ipAllowlist) }
     var maxConcurrent by remember { mutableStateOf(settings.maxConcurrent.toString()) }
     var port by remember { mutableStateOf(settings.port.toString()) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.str_gateway_settings_81a3d1)) }, text = {
-        Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppPageScaffold(title = stringResource(R.string.str_gateway_settings_81a3d1), onBack = onBack) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.str_changes_apply_the_next_time_th_3189c0), color = Muted, style = MaterialTheme.typography.bodySmall)
             Text(stringResource(R.string.str_network_53ebc5), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_wi_fi_open_630746), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_allow_devices_on_the_same_wi_f_249f94), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(wifi, { wifi = it }) }
@@ -971,20 +1006,26 @@ private fun SettingsDialog(settings: GatewaySettings, gatewaySecurity: GatewaySe
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_app_lock_a34fa2), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_require_phone_pin_or_biometric_eb3ca5), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(appLock, { appLock = it }) }
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(stringResource(R.string.str_block_screenshots_6223b2), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.str_hide_app_content_from_screensh_cf2805), color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(screenshotBlock, { screenshotBlock = it }) }
         }
-    }, confirmButton = { Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.routingStrategy = routingStrategy; settings.stickySession = stickySession; settings.ipAllowlist = ipAllowlist; maxConcurrent.toIntOrNull()?.let { settings.maxConcurrent = it }; stickyTtl.toIntOrNull()?.let { settings.stickyTtlSeconds = it }; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onServerSettingsChanged(); onDismiss() }) { Text(stringResource(R.string.str_save_efc007)) } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_cancel_77dfd2)) } })
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.routingStrategy = routingStrategy; settings.stickySession = stickySession; settings.ipAllowlist = ipAllowlist; maxConcurrent.toIntOrNull()?.let { settings.maxConcurrent = it }; stickyTtl.toIntOrNull()?.let { settings.stickyTtlSeconds = it }; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onServerSettingsChanged(); onDismiss() }) { Text(stringResource(R.string.str_save_efc007)) }
+                    OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_cancel_77dfd2)) }
+                }
+        }
+    }
 }
 
 @Composable
-private fun ChainDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
+@Composable
+private fun ChainPage(providerStore: ProviderStore, onBack: () -> Unit) {
+
     val context = LocalContext.current
     val chainStore = remember { ChainStore(context) }
     var entries by remember { mutableStateOf(chainStore.load(providerStore.list())) }
     fun persist(next: List<ChainEntry>) { entries = next; chainStore.save(next) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.str_routing_chain_2a695d)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppPageScaffold(title = stringResource(R.string.str_routing_chain_2a695d), onBack = onBack) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.str_requests_using_auto_start_from_ec5b5c), color = Muted, style = MaterialTheme.typography.bodySmall)
                 ChainTier.values().forEach { tier ->
                     Text(tier.name, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
@@ -1003,13 +1044,18 @@ private fun ChainDialog(providerStore: ProviderStore, onDismiss: () -> Unit) {
                     }
                 }
             }
-        },
-        confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) } }
-    )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = onDismiss) { Text(stringResource(R.string.str_done_e9b450)) }
+                }
+        }
+    }
 }
 
 @Composable
-private fun UpdateDialog(settings: GatewaySettings, onDismiss: () -> Unit) {
+@Composable
+private fun UpdatePage(settings: GatewaySettings, onBack: () -> Unit) {
+
     val context = LocalContext.current
     val activity = context as? ComponentActivity
     val manager = remember { UpdateManager(context) }
@@ -1045,11 +1091,9 @@ private fun UpdateDialog(settings: GatewaySettings, onDismiss: () -> Unit) {
             }
         } }
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.str_app_updates_16213f)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        AppPageScaffold(title = stringResource(R.string.str_app_updates_16213f), onBack = onBack) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(stringResource(R.string.str_update_current_version_9ae4a9), color = Muted, style = MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.str_update_channel_3e7b95), style = MaterialTheme.typography.labelSmall, color = Muted)
@@ -1075,20 +1119,21 @@ private fun UpdateDialog(settings: GatewaySettings, onDismiss: () -> Unit) {
                     TextButton(onClick = { manager.openReleasePage(available) }) { Text(stringResource(R.string.str_open_github_release_page_61878c)) }
                 }
             }
-        },
-        confirmButton = {
-            when {
-                downloadedFile != null -> Button(onClick = { manager.install(downloadedFile!!) { status = it } }) { Text(stringResource(R.string.str_install_update_8a3695)) }
-                downloading -> Button(enabled = false, onClick = {}) { Text(stringResource(R.string.str_update_downloading_b5c780)) }
-                update != null -> Button(onClick = {
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    when {
+                    downloadedFile != null -> Button(onClick = { manager.install(downloadedFile!!) { status = it } }) { Text(stringResource(R.string.str_install_update_8a3695)) }
+                    downloading -> Button(enabled = false, onClick = {}) { Text(stringResource(R.string.str_update_downloading_b5c780)) }
+                    update != null -> Button(onClick = {
                     downloading = true; progress = 0; status = "Downloading inside JH GetWay…"
                     manager.download(update!!, { value -> activity?.runOnUiThread { progress = value } }) { result -> activity?.runOnUiThread { downloading = false; result.onSuccess { downloadedFile = it; progress = 100; status = "Download complete. Tap Install update." }.onFailure { status = "Download failed: ${it.message}" } } }
-                }) { Text(stringResource(R.string.str_download_update_870d57)) }
-                else -> Button(enabled = !checking, onClick = ::checkLatest) { Text(if (checking) stringResource(R.string.str_checking_820d60) else stringResource(R.string.str_check_for_updates_736b90)) }
-            }
-        },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_close_bbfa77)) } }
-    )
+                    }) { Text(stringResource(R.string.str_download_update_870d57)) }
+                    else -> Button(enabled = !checking, onClick = ::checkLatest) { Text(if (checking) stringResource(R.string.str_checking_820d60) else stringResource(R.string.str_check_for_updates_736b90)) }
+                    }
+                    OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_close_bbfa77)) }
+                }
+        }
+    }
 }
 
 @Composable

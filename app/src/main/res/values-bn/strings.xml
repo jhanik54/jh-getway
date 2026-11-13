@@ -273,4 +273,17 @@
     <string name="str_log_exported_5c3a81">লগ export হয়েছে</string>
     <string name="str_log_export_failed_9e7b24">Export ব্যর্থ</string>
     <string name="str_export_logs_csv_4b8c19">লগ CSV হিসেবে export করুন</string>
+    <string name="str_back_2c7e91">ফিরে যান</string>
+    <string name="str_use_this_gateway_5c1e93">এই গেটওয়েকে provider হিসেবে ব্যবহার করুন</string>
+    <string name="str_playground_pick_model_4b8e37">মডেল বাছুন</string>
+    <string name="str_playground_no_model_hint_7d3a82">মডেল বাছতে চাপুন</string>
+    <string name="str_playground_empty_title_6e1c47">কথোপকথন শুরু করুন</string>
+    <string name="str_playground_empty_body_9b3d25">একটি API key-ই যথেষ্ট। provider নিজেই তার rotation চালাবে, আর app দেখিয়ে দেবে কোন মডেলগুলো ফ্রি।</string>
+    <string name="str_playground_connect_provider_5d8b34">Provider কানেক্ট করুন</string>
+    <string name="str_playground_one_key_explains_8b4d19">একটি API key দিন। provider-এর সব মডেল এখানে পাওয়া যাবে, আর তার নিজস্ব rotation গেটওয়ের পেছনে চলতে থাকবে।</string>
+    <string name="str_playground_use_this_provider_3c7a92">এই provider ব্যবহার করুন</string>
+    <string name="str_playground_free_section_6d3a81">ফ্রি মডেল</string>
+    <string name="str_playground_unknown_section_1e8b47">যেসব মডেলের মূল্য তথ্য নেই</string>
+    <string name="str_playground_paid_section_7a2c36">পেইড মডেল</string>
+    <string name="str_playground_no_models_9c7e14">এখনো কোনো মডেল নেই। আগে provider কানেক্ট করুন।</string>
 </resources>
