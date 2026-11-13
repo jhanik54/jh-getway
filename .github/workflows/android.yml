@@ -129,9 +129,16 @@ jobs:
             app/build/outputs/apk/release/app-release.apk
             latest.json
           body: |
-            **v0.7.0 — Playground and agent setup**
+            **v0.7.1 — Pages and a chat-first Playground**
 
             New in this release:
+            - Every screen is a page now: routing chain, request logs, usage, settings, backup, help and app updates open on their own page with a back button instead of a popup
+            - The Playground opens straight into a chat surface, the way a chat assistant does, with the model picker in a sheet at the top and the composer at the bottom
+            - One API key is enough in the Playground: the provider keeps doing its own rotation behind it, and the app shows which of its models are free and which are paid
+            - The provider editor can now add this gateway itself as a provider, so the gateway can be part of a chain with external providers
+
+            Previous highlights (v0.7.0 — Playground and agent setup):
+
             - Playground: paste an API key and the app finds which of that provider's models are free and which are paid, straight from the provider's own pricing data
             - Chat from the Playground, either through this gateway (so the routing chain and the failover are exercised) or straight to the provider
             - One tap turns the pasted key into a real provider, so the gateway can route to it

@@ -2,7 +2,7 @@
 
 Covers signing, verification, minify policy, dependency/license review and the tag → publish flow. Complements [`docs/DEVICE_MATRIX.md`](DEVICE_MATRIX.md) (on-device verification, **not yet executed**) and [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).
 
-> Current version: `versionCode 37` / `versionName 0.7.0` in `app/build.gradle.kts`. Do not change either without the owner's approval.
+> Current version: `versionCode 38` / `versionName 0.7.1` in `app/build.gradle.kts`. Do not change either without the owner's approval.
 
 ## 1. Signing secrets
 
