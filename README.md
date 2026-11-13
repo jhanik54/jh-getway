@@ -4,11 +4,13 @@
 
 A local Android AI gateway that sits between your apps and multiple OpenAI-compatible AI providers: one endpoint on your device, multiple keys, automatic fallback, and a full monitoring story.
 
-> অবস্থা / Status: in active development. `main` is built and unit-tested in CI on every push. The latest published release is **v36.0.0** (versionCode 36). The on-device matrix (Android 8–15, Poco/Xiaomi) is **not yet executed** — see [docs/DEVICE_MATRIX.md](docs/DEVICE_MATRIX.md). Planned improvements are listed in [docs/IMPROVEMENT_BACKLOG.md](docs/IMPROVEMENT_BACKLOG.md).
+> অবস্থা / Status: in active development. `main` is built and unit-tested in CI on every push. The latest published release is **v37.0.0** (versionCode 37). The on-device matrix (Android 8–15, Poco/Xiaomi) is **not yet executed** — see [docs/DEVICE_MATRIX.md](docs/DEVICE_MATRIX.md). Planned improvements are listed in [docs/IMPROVEMENT_BACKLOG.md](docs/IMPROVEMENT_BACKLOG.md).
 
 ## বৈশিষ্ট্য (Features)
 
 - **Foreground gateway service** — Ktor/CIO local server (`0.0.0.0:<port>`), foreground notification, boot restart (`BootReceiver`), `/healthz` endpoint
+- **Playground** — paste an API key, see which of that provider's models are free and which are paid, and chat with them from inside the app (through the gateway or straight to the provider)
+- **Agent setup** — Settings generates ready-to-paste configuration for OpenCode, Claude Code, Cline and any OpenAI-compatible client, pointed at this gateway
 - **Protocol adapters** — OpenAI Chat Completions, Anthropic Messages, OpenAI Responses; streaming (SSE) bridging and tool-call translation between formats
 - **Routing** — persistent Best/Good/Basic chain with reorder controls; Priority, Round Robin and Least-Latency strategies; TTL sticky sessions; per-provider upstream model aliases
 - **Failover** — classified provider failures, `Retry-After`-aware cooldowns, 401 disable, 5xx cooldown, bounded fallback chain

@@ -17,8 +17,8 @@ android {
         applicationId = "com.jh.gateway"
         minSdk = 26
         targetSdk = 35
-        versionCode = 36
-        versionName = "0.6.1"
+        versionCode = 37
+        versionName = "0.7.0"
     }
 
     val signingPassword = System.getenv("JH_SIGNING_PASSWORD")

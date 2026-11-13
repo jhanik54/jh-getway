@@ -129,9 +129,20 @@ jobs:
             app/build/outputs/apk/release/app-release.apk
             latest.json
           body: |
-            **v0.6.1 — Audit fixes**
+            **v0.7.0 — Playground and agent setup**
 
             New in this release:
+            - Playground: paste an API key and the app finds which of that provider's models are free and which are paid, straight from the provider's own pricing data
+            - Chat from the Playground, either through this gateway (so the routing chain and the failover are exercised) or straight to the provider
+            - One tap turns the pasted key into a real provider, so the gateway can route to it
+            - Settings generates ready-to-paste setup for OpenCode, Claude Code, Cline and any OpenAI-compatible client, pointed at this gateway
+            - Update screen gained a stable/beta channel, remembers the last check, and the More tab shows when an update is available
+            - A provider can carry its own timeout, so one slow provider no longer stalls the chain
+            - Provider cards and headings now follow the dark theme
+            - The request log can be exported as a redacted CSV file
+
+            Previous highlights (v0.6.1 — Audit fixes):
+
             - Fixed a gateway freeze: the models and logs endpoints held a concurrency permit without releasing it, so a few authorized requests could wedge the whole gateway
             - A provider that cannot serve a request (for example an Anthropic provider asked for `response_format`) no longer fails the whole call — the next provider in the chain is used instead
             - Unsupported fields on the Anthropic and Responses endpoints are now rejected explicitly instead of being silently dropped

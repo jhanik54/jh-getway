@@ -2,6 +2,24 @@
 
 Working list of what is worth adding or improving next, ordered by value per unit of risk. Items marked **done** are already in `main`; the rest are proposals with the reasoning, so the owner can pick.
 
+## Done in the Playground round
+
+| Area | What was added |
+|---|---|
+| Playground | A screen (More → Playground) where an API key is pasted, the provider's model list is fetched, and every model is labelled **free**, **paid** or **unknown** from the provider's own pricing metadata. The counts are shown as "N free · N paid · N without pricing info". |
+| Playground chat | The conversation can be sent through the running gateway (so the routing chain and the failover are exercised) or straight to the provider. |
+| One-click provider | "Create provider" registers the pasted key as a real provider, so the gateway itself can route to it. The key is encrypted by the AndroidKeyStore like every other key. |
+| Agent setup | Settings → Agent setup generates ready-to-paste configuration for OpenCode (`opencode.json`), the OpenAI SDK, Claude Code, Cline/Roo Code and plain `curl`, each carrying the gateway address and the gateway key, plus buttons to copy them. |
+| Update channels | The update screen now has a stable/beta selector, remembers the last check, and the More tab shows "Update available" when a newer release exists. |
+| Per-provider timeout | A provider can carry its own read timeout (0 = the global setting), so one slow provider no longer stalls a chain that would fall back quickly. |
+| Dark theme | The provider cards, chain entries and headings follow the theme colours instead of hardcoded white and navy. |
+| Log export | The request log can be written to a file as CSV (redacted: endpoint, status, latency, provider, model — never a key, prompt or response). |
+
+### How the free/paid classification works
+
+The app never guesses: a model is **free** only when the provider publishes pricing metadata that says zero, or when the model id follows the widespread `:free` convention. Providers that publish no pricing yield **unknown**, so the Playground shows the real number of free models, the real number of paid models, and the number it could not classify.
+
+
 ## Done in this pass (audit fixes)
 
 | Area | Problem found | Fix |
