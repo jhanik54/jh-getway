@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -70,6 +71,7 @@ private val PlaygroundMuted = Color(0xFF667085)
  * them. The provider keeps doing its own rotation underneath, so one key replaces a
  * long list of keys.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun PlaygroundPage(
     providerStore: ProviderStore,
@@ -282,6 +284,7 @@ fun PlaygroundPage(
  * Collects one API key and turns it into a provider. The provider's own rotation keeps
  * working behind it, so a single key is enough.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun ConnectProviderSheet(onDismiss: () -> Unit, onConnected: (String, ModelCatalog) -> Unit) {
     val context = LocalContext.current

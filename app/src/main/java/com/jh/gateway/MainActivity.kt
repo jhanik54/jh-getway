@@ -278,7 +278,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                         if (!running) action = GatewayService.ACTION_STOP
                     }
                     if (running) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
-                }, onViewChain = { page = true }, onViewLogs = { page = true })
+                }, onViewChain = { page = "chain" }, onViewLogs = { page = "monitoring" })
                 1 -> ProvidersScreen(Modifier.padding(padding), keys, providerMessage, unreadableKeys = providerStore.hasUnreadableKeys(), onInfo = { key -> detailProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onAdd = { showAddDialog = true }, onToggle = { key, enabled -> providerStore.setEnabled(key.id, enabled); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onEdit = { key -> editingProvider = providerStore.list().firstOrNull { provider -> provider.id == key.id } }, onDelete = { key -> providerStore.remove(key.id); keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) } }, onTest = { key -> val provider = providerStore.list().firstOrNull { it.id == key.id }; val secret = provider?.let { providerStore.apiKey(it) }; if (provider == null || secret == null) providerMessage = credentialUnavailable else { providerMessage = context.getString(R.string.str_testing_provider_8d3a16, key.name); ProviderModelFetcher.fetch(provider.baseUrl, secret, provider.protocol) { result -> (context as? ComponentActivity)?.runOnUiThread { providerMessage = result.fold({ context.getString(R.string.str_test_ok_models_2c7b45, key.name, it.size) }, { context.getString(R.string.str_test_failed_provider_9e4d18, key.name, it.message ?: "test failed") }) } } } })
                 else -> MoreScreen(Modifier.padding(padding), updateMessage, updateBadge = updateManager.hasUpdateAvailable(), onSettings = { page = "settings" }, onPlayground = { page = "playground" }, onChain = { page = "chain" }, onMonitoring = { page = "monitoring" }, onBackup = { page = "backup" }, onHelp = { page = "help" }, onUpdate = { page = "update" })
             }
@@ -420,7 +420,7 @@ private fun AddProviderDialog(initial: StoredProvider? = null, initialKey: Strin
             OutlinedTextField(timeoutSeconds, { timeoutSeconds = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.str_provider_timeout_seconds_5d3a91)) }, supportingText = { Text(stringResource(R.string.str_provider_timeout_hint_8e1c46)) }, singleLine = true)
         } },
         confirmButton = { Button(enabled = name.isNotBlank() && url.isNotBlank() && key.isNotBlank(), onClick = { onSave(name, url, model, key, protocol, aliases.split(',').map(String::trim).filter(String::isNotBlank), timeoutSeconds.toIntOrNull()?.times(1000) ?: 0) }) { Text(stringResource(R.string.str_save_securely_803e41)) } },
-        dismissButton = { OutlinedButton(onClick = onBack) { Text(stringResource(R.string.str_cancel_77dfd2)) } }
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.str_cancel_77dfd2)) } }
     )
     if (showPresets) {
         AlertDialog(
@@ -649,7 +649,7 @@ private fun ProviderDetailDialog(provider: StoredProvider, health: ProviderHealt
                 Text(stringResource(R.string.str_api_keys_are_never_shown_in_fu_72f5bf), color = Muted, style = MaterialTheme.typography.labelSmall)
             }
         },
-        confirmButton = { Button(onClick = onBack) { Text(stringResource(R.string.str_close_bbfa77)) } }
+        confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.str_close_bbfa77)) } }
     )
 }
 
