@@ -10,6 +10,8 @@
     <string name="str_api_keys_are_never_shown_in_fu_72f5bf">API keys are never shown in full and never included in logs.</string>
     <string name="str_app_lock_a34fa2">App lock</string>
     <string name="str_app_updates_16213f">App updates</string>
+    <string name="str_update_system_explains_5e9a47">Check GitHub for a newer version of the app</string>
+    <string name="str_open_3f9c71">Open</string>
     <string name="str_appearance_41def7">Appearance</string>
     <string name="str_backup_password_d96a60">Backup password</string>
     <string name="str_backup_restore_a16162">Backup &amp; restore</string>

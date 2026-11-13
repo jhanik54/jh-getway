@@ -1,6 +1,9 @@
 package com.jh.gateway
 
+import android.content.Intent
+import android.content.ClipData
 import android.content.ClipboardManager
+import android.os.Bundle
 import android.app.KeyguardManager
 import android.view.WindowManager
 import android.provider.Settings as AndroidSettings
@@ -980,8 +983,10 @@ Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
     }
 }
 
+@Composable
 private fun SettingsPage(settings: GatewaySettings, gatewaySecurity: GatewaySecurity, onSecurityChanged: () -> Unit, onAppearanceChanged: () -> Unit, onServerSettingsChanged: () -> Unit = {}, onRegenerateKey: () -> Unit = {}, onOpenUpdate: () -> Unit = {}, onBack: () -> Unit) {
 
+    val context = LocalContext.current
     var wifi by remember { mutableStateOf(settings.wifiMode) }
     var boot by remember { mutableStateOf(settings.startOnBoot) }
     var appLock by remember { mutableStateOf(settings.appLock) }
