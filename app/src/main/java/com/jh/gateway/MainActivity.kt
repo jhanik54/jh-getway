@@ -1003,7 +1003,7 @@ Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 480.dp), ve
         }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.routingStrategy = routingStrategy; settings.stickySession = stickySession; settings.ipAllowlist = ipAllowlist; maxConcurrent.toIntOrNull()?.let { settings.maxConcurrent = it }; stickyTtl.toIntOrNull()?.let { settings.stickyTtlSeconds = it }; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onServerSettingsChanged(); onDismiss() }) { Text(stringResource(R.string.str_save_efc007)) }
+                    Button(onClick = { settings.wifiMode = wifi; settings.startOnBoot = boot; settings.appLock = appLock; settings.screenshotBlock = screenshotBlock; settings.theme = theme; settings.routingStrategy = routingStrategy; settings.stickySession = stickySession; settings.ipAllowlist = ipAllowlist; maxConcurrent.toIntOrNull()?.let { settings.maxConcurrent = it }; stickyTtl.toIntOrNull()?.let { settings.stickyTtlSeconds = it }; settings.lastUnlock = System.currentTimeMillis(); port.toIntOrNull()?.let { settings.port = it }; onSecurityChanged(); onAppearanceChanged(); onServerSettingsChanged(); onBack() }) { Text(stringResource(R.string.str_save_efc007)) }
                     OutlinedButton(onClick = onBack) { Text(stringResource(R.string.str_cancel_77dfd2)) }
                 }
         }
