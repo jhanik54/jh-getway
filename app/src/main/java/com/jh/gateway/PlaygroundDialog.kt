@@ -104,10 +104,10 @@ fun PlaygroundDialog(
     val text_playground_direct_8d1f27 = stringResource(R.string.str_playground_direct_8d1f27)
     val text_playground_discovering_6d81f3 = stringResource(R.string.str_playground_discovering_6d81f3)
     val text_playground_find_models_3e8b17 = stringResource(R.string.str_playground_find_models_3e8b17)
-    val text_playground_free_badge_2a8e61 = stringResource(R.string.str_playground_free_badge_2a8e61)
+
     val text_playground_free_only_1a5b90 = stringResource(R.string.str_playground_free_only_1a5b90)
     val text_playground_message_3e9c17 = stringResource(R.string.str_playground_message_3e9c17)
-    val text_playground_paid_badge_9c3d17 = stringResource(R.string.str_playground_paid_badge_9c3d17)
+
     val text_playground_paid_only_7c9f43 = stringResource(R.string.str_playground_paid_only_7c9f43)
     val text_playground_provider_created_4a6d28 = stringResource(R.string.str_playground_provider_created_4a6d28)
     val text_playground_provider_name_2c8f51 = stringResource(R.string.str_playground_provider_name_2c8f51)
@@ -116,7 +116,7 @@ fun PlaygroundDialog(
     val text_playground_step2_6c4e28 = stringResource(R.string.str_playground_step2_6c4e28)
     val text_playground_step3_b1e07d = stringResource(R.string.str_playground_step3_b1e07d)
     val text_playground_title_4d1c73 = stringResource(R.string.str_playground_title_4d1c73)
-    val text_playground_unknown_badge_7e4b02 = stringResource(R.string.str_playground_unknown_badge_7e4b02)
+
     val text_playground_via_gateway_5f2b64 = stringResource(R.string.str_playground_via_gateway_5f2b64)
     val providers = providerStore.list()
     var createdProviderId by remember { mutableStateOf<String?>(null) }
@@ -290,9 +290,9 @@ private fun ModelRow(model: CatalogModel, selected: Boolean, onSelect: () -> Uni
         ModelCost.UNKNOWN -> PlaygroundMuted
     }
     val label = when (model.cost) {
-        ModelCost.FREE -> text_playground_free_badge_2a8e61
-        ModelCost.PAID -> text_playground_paid_badge_9c3d17
-        ModelCost.UNKNOWN -> text_playground_unknown_badge_7e4b02
+        ModelCost.FREE -> stringResource(R.string.str_playground_free_badge_2a8e61)
+        ModelCost.PAID -> stringResource(R.string.str_playground_paid_badge_9c3d17)
+        ModelCost.UNKNOWN -> stringResource(R.string.str_playground_unknown_badge_7e4b02)
     }
     Row(
         Modifier
