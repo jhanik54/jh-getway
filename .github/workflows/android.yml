@@ -129,9 +129,13 @@ jobs:
             app/build/outputs/apk/release/app-release.apk
             latest.json
           body: |
-            **v0.7.1 — Pages and a chat-first Playground**
+            **v0.7.2 — Stability fixes**
 
             New in this release:
+            - Per-provider timeout override now actually works: the value saved in the provider editor is passed to the gateway and used for that provider's requests
+            - Fixed the provider-add flow dropping the per-provider timeout field when creating a new provider
+
+            Previous highlights (v0.7.1 — Pages and a chat-first Playground):
             - Every screen is a page now: routing chain, request logs, usage, settings, backup, help and app updates open on their own page with a back button instead of a popup
             - The Playground opens straight into a chat surface, the way a chat assistant does, with the model picker in a sheet at the top and the composer at the bottom
             - One API key is enough in the Playground: the provider keeps doing its own rotation behind it, and the app shows which of its models are free and which are paid
