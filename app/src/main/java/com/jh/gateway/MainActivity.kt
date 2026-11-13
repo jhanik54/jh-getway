@@ -289,7 +289,7 @@ private fun GatewayApp(onRequestNotifications: () -> Unit) {
                 gatewayKey = gatewaySecurity.gatewayKey(),
                 onDismiss = { showAddDialog = false },
                 onSave = { name, url, model, key, protocol, aliases, timeoutMs ->
-                    runCatching { providerStore.add(name, url, model, key, protocol, aliases) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) }; showAddDialog = false }.onFailure { providerMessage = it.message ?: couldNotAddProvider }
+                    runCatching { providerStore.add(name, url, model, key, protocol, aliases, timeoutMs) }.onSuccess { keys = providerStore.list().map { it.toProviderKey(providerStore, providerHealth) }; showAddDialog = false }.onFailure { providerMessage = it.message ?: couldNotAddProvider }
                 }
             )
         }
